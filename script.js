@@ -1,6 +1,11 @@
 const gridSize = 8;
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 禁止遊戲區域觸控滾動
+    document.querySelector('.game-container').addEventListener('touchmove', function(e) {
+        e.preventDefault();
+    }, { passive: false });
+
     const gameBoard = document.querySelector('.game-board');
     const nextBlockPreview = document.querySelector('.next-block-preview');
     const levelTimer = document.querySelector('.level-timer');
