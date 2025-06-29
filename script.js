@@ -273,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         isProcessing = false;
+        saveGameState();
     }
     
     async function handleMatches() {
@@ -363,6 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (maxCombo > maxComboRecord) maxComboRecord = maxCombo;
         updateComboUI(currentComboMultiplier);
         console.log("--- Finished Match Handling ---");
+        saveGameState();
     }
     
     function findNeighbors(clearedBlocks) {
@@ -482,6 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoard();
         updateTimerUI();
         await new Promise(resolve => setTimeout(resolve, 300));
+        saveGameState();
     }
 
     function findBlocksToClear() {
@@ -571,18 +574,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!lineContainer || !gameBoard) return;
         const boardRect = gameBoard.getBoundingClientRect();
         const promises = [];
-        // 1. 射線動畫：從被消除的數字格子到炸彈
-        bombs.forEach(bombString => {
-            const { row: bombRow, col: bombCol } = JSON.parse(bombString);
-            const bombCell = getCellElement(bombRow, bombCol);
-            if (!bombCell) return;
-            const bombRect = bombCell.getBoundingClientRect();
-            clearedBlocks.forEach(blockString => {
-                const { row, col } = JSON.parse(blockString);
+        // 1. 射線動畫：從數字方格射向炸彈
+        clearedBlocks.forEach(blockString => {
+            const { row, col } = JSON.parse(blockString);
+            const cell = getCellElement(row, col);
+            if (!cell) return;
+            const cellRect = cell.getBoundingClientRect();
+            bombs.forEach(bombString => {
+                const { row: bombRow, col: bombCol } = JSON.parse(bombString);
+                // 只畫同一行/列的射線
                 if ((row === bombRow || col === bombCol) && !(row === bombRow && col === bombCol)) {
-                    const cell = getCellElement(row, col);
-                    if (!cell) return;
-                    const cellRect = cell.getBoundingClientRect();
+                    const bombCell = getCellElement(bombRow, bombCol);
+                    if (!bombCell) return;
+                    const bombRect = bombCell.getBoundingClientRect();
                     // 畫射線
                     const line = document.createElement('div');
                     line.className = 'laser-line bomb-laser';
@@ -635,8 +639,6 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let i = 0; i < 8; i++) {
                 const angle = (i * 45) * Math.PI / 180;
                 const length = 32;
-                const x2 = Math.cos(angle) * length;
-                const y2 = Math.sin(angle) * length;
                 const ray = document.createElement('div');
                 ray.className = 'bomb-ray';
                 ray.style.position = 'absolute';
@@ -733,6 +735,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function init() {
+        if (loadGameState()) {
+            renderBoard();
+            updatePreview();
+            updateTimerUI();
+            updateScoreUI();
+            updateLevelUI();
+            updateComboUI(currentComboMultiplier);
+            setupRestartButton();
+            return;
+        }
         createBoard();
         initializeBoardState();
         setupEventListeners();
@@ -744,6 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateComboUI(0);
         setupRestartButton();
         console.log('Game initialized and ready!');
+        saveGameState();
     }
 
     function updateScoreUI() {
@@ -864,7 +877,44 @@ document.addEventListener('DOMContentLoaded', () => {
         updateScoreUI();
         updateLevelUI();
         updateComboUI(0);
+        saveGameState();
     }
+
+    function saveGameState() {
+        const state = {
+            boardState,
+            nextBlock,
+            isGameOver,
+            level,
+            movesPerLevel,
+            movesLeft,
+            score,
+            currentComboMultiplier,
+            maxComboRecord
+        };
+        localStorage.setItem('numberGameSave', JSON.stringify(state));
+    }
+
+    function loadGameState() {
+        const data = localStorage.getItem('numberGameSave');
+        if (!data) return false;
+        try {
+            const state = JSON.parse(data);
+            if (!state || !state.boardState) return false;
+            boardState = state.boardState;
+            nextBlock = state.nextBlock;
+            isGameOver = state.isGameOver;
+            level = state.level;
+            movesPerLevel = state.movesPerLevel;
+            movesLeft = state.movesLeft;
+            score = state.score;
+            currentComboMultiplier = state.currentComboMultiplier;
+            maxComboRecord = state.maxComboRecord;
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function clearStorage() { localStorage.removeItem('numberGameSave'); }
 
     // === 主初始化 ===
     init();
