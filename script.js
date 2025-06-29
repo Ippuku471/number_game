@@ -905,7 +905,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!data) return false;
         try {
             const state = JSON.parse(data);
-            if (!state || !state.boardState) return false;
+            // 檢查必要欄位
+            if (!state || !Array.isArray(state.boardState) || !state.boardState.length) {
+                localStorage.removeItem('numberGameSave');
+                return false;
+            }
             boardState = state.boardState;
             nextBlock = state.nextBlock;
             isGameOver = state.isGameOver;
@@ -916,7 +920,10 @@ document.addEventListener('DOMContentLoaded', () => {
             currentComboMultiplier = state.currentComboMultiplier;
             maxComboRecord = state.maxComboRecord;
             return true;
-        } catch (e) { return false; }
+        } catch (e) {
+            localStorage.removeItem('numberGameSave');
+            return false;
+        }
     }
 
     function clearStorage() { localStorage.removeItem('numberGameSave'); }
