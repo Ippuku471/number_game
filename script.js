@@ -741,6 +741,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function init() {
         if (loadGameState()) {
+            // 載入狀態後，需要重新建立棋盤和設定事件
+            createBoard();
+            setupEventListeners();
             renderBoard();
             updatePreview();
             updateTimerUI();
