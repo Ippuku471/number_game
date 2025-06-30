@@ -339,6 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await flashUnlocked(numberMatches); // 再解鎖
                 clearBlocksFromState(numberMatches); // 最後消除
                 applyGravity();
+                console.log('after gravity, can clear:', Array.from(findBlocksToClear()));
                 renderBoard();
                 updateScoreUI();
                 await new Promise(resolve => setTimeout(resolve, 350));
