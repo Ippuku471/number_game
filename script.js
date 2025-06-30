@@ -412,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const triggerMap = new Map(); // 只記錄數字方塊觸發炸彈
         if (clearedNumberedBlocks.size === 0) return bombsToDetonate;
 
-        // 只記錄數字方塊觸發炸彈，來源必須型態為 number
+        // 只記錄數字方塊觸發炸彈，來源必須型態為 number，且來源座標不能等於目標座標
         clearedNumberedBlocks.forEach(blockString => {
             const {row, col} = JSON.parse(blockString);
             if (!boardState[row][col] || boardState[row][col].type !== 'number') return;
@@ -420,7 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let c = col - 1; c >= 0; c--) {
                 const block = boardState[row][c];
                 if (!block) break;
-                if (block.type === 'bomb') {
+                if (block.type === 'bomb' && (col !== c)) {
                     const bombStr = JSON.stringify({row: row, col: c});
                     bombsToDetonate.add(bombStr);
                     triggerMap.set(bombStr, {row: row, col: col});
@@ -430,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let c = col + 1; c < gridSize; c++) {
                 const block = boardState[row][c];
                 if (!block) break;
-                if (block.type === 'bomb') {
+                if (block.type === 'bomb' && (col !== c)) {
                     const bombStr = JSON.stringify({row: row, col: c});
                     bombsToDetonate.add(bombStr);
                     triggerMap.set(bombStr, {row: row, col: col});
@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let r = row - 1; r >= 0; r--) {
                 const block = boardState[r][col];
                 if (!block) break;
-                if (block.type === 'bomb') {
+                if (block.type === 'bomb' && (row !== r)) {
                     const bombStr = JSON.stringify({row: r, col: col});
                     bombsToDetonate.add(bombStr);
                     triggerMap.set(bombStr, {row: row, col: col});
@@ -451,7 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let r = row + 1; r < gridSize; r++) {
                 const block = boardState[r][col];
                 if (!block) break;
-                if (block.type === 'bomb') {
+                if (block.type === 'bomb' && (row !== r)) {
                     const bombStr = JSON.stringify({row: r, col: col});
                     bombsToDetonate.add(bombStr);
                     triggerMap.set(bombStr, {row: row, col: col});
@@ -471,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let c = bombCol - 1; c <= bombCol + 1; c++) {
                         if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
                             const block = boardState[r][c];
-                            if (block && block.type === 'bomb') {
+                            if (block && block.type === 'bomb' && (bombRow !== r || bombCol !== c)) {
                                 const newBombString = JSON.stringify({row: r, col: c});
                                 if (!bombsToDetonate.has(newBombString)) {
                                     bombsToDetonate.add(newBombString);
@@ -650,24 +650,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function animateLaserToBombsWithTriggers(clearedBlocks, bombs, triggerMap) {
-        const lineContainer = document.querySelector('.line-container');
-        const gameBoard = document.querySelector('.game-board');
-        if (!lineContainer || !gameBoard) return;
-        const boardRect = gameBoard.getBoundingClientRect();
-        const promises = [];
         // 先把本輪被消除的數字方塊座標做成集合
         const clearedSet = new Set();
         clearedBlocks.forEach(blockString => {
             const { row, col } = JSON.parse(blockString);
             clearedSet.add(`${row},${col}`);
         });
-        // 1. 射線動畫：只從本輪被消除的數字方塊指向被觸發的炸彈，且來源與目標座標不能相同
+        // 傳遞感動畫：先高亮數字方塊，延遲0.15秒後高亮炸彈
         bombs.forEach(bombString => {
             const triggerInfo = triggerMap.get(bombString);
             if (triggerInfo) {
                 const { row: triggerRow, col: triggerCol } = triggerInfo;
                 const { row: bombRow, col: bombCol } = JSON.parse(bombString);
-                // 嚴格檢查：來源必須是本輪被消除的數字方塊且型態為 number，目標必須型態為 bomb，且來源與目標座標不能相同
                 if (
                     clearedSet.has(`${triggerRow},${triggerCol}`) &&
                     boardState[triggerRow][triggerCol] &&
@@ -678,87 +672,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 ) {
                     const triggerCell = getCellElement(triggerRow, triggerCol);
                     const bombCell = getCellElement(bombRow, bombCol);
-                    if (triggerCell && bombCell) {
-                        const triggerRect = triggerCell.getBoundingClientRect();
-                        const bombRect = bombCell.getBoundingClientRect();
-                        // 畫射線
-                        const line = document.createElement('div');
-                        line.className = 'laser-line bomb-laser';
-                        const x1 = triggerRect.left - boardRect.left + triggerRect.width / 2;
-                        const y1 = triggerRect.top - boardRect.top + triggerRect.height / 2;
-                        const x2 = bombRect.left - boardRect.left + bombRect.width / 2;
-                        const y2 = bombRect.top - boardRect.top + bombRect.height / 2;
-                        const dx = x2 - x1;
-                        const dy = y2 - y1;
-                        const length = Math.sqrt(dx * dx + dy * dy);
-                        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-                        line.style.position = 'absolute';
-                        line.style.left = x1 + 'px';
-                        line.style.top = y1 + 'px';
-                        line.style.width = length + 'px';
-                        line.style.height = '3px';
-                        line.style.background = 'linear-gradient(90deg, #F9A03F 60%, #fff 100%)';
-                        line.style.transform = `rotate(${angle}deg)`;
-                        line.style.transformOrigin = '0 50%';
-                        line.style.opacity = '0.95';
-                        line.style.borderRadius = '2px';
-                        line.style.pointerEvents = 'none';
-                        line.style.zIndex = '1001';
-                        line.style.animation = 'laser-appear 0.22s linear forwards';
-                        lineContainer.appendChild(line);
-                        setTimeout(() => line.remove(), 220);
-                    }
+                    if (triggerCell) triggerCell.classList.add('highlight-bomb-link');
+                    setTimeout(() => {
+                        if (triggerCell) triggerCell.classList.remove('highlight-bomb-link');
+                        if (bombCell) bombCell.classList.add('highlight-bomb-link');
+                        setTimeout(() => {
+                            if (bombCell) bombCell.classList.remove('highlight-bomb-link');
+                        }, 150);
+                    }, 150);
                 }
             }
         });
-        // 2. 爆炸 emoji + 放射線動畫（不變）
-        bombs.forEach(bombString => {
-            const { row, col } = JSON.parse(bombString);
-            const bombCell = getCellElement(row, col);
-            if (!bombCell) return;
-            const bombRect = bombCell.getBoundingClientRect();
-            // 爆炸 emoji
-            const explosion = document.createElement('div');
-            explosion.className = 'bomb-explosion';
-            explosion.style.position = 'absolute';
-            explosion.style.left = (bombRect.left - boardRect.left + bombRect.width / 2) + 'px';
-            explosion.style.top = (bombRect.top - boardRect.top + bombRect.height / 2) + 'px';
-            explosion.style.transform = 'translate(-50%, -50%)';
-            explosion.textContent = '💥';
-            explosion.style.fontSize = '24px';
-            explosion.style.zIndex = '1002';
-            explosion.style.pointerEvents = 'none';
-            lineContainer.appendChild(explosion);
-            setTimeout(() => explosion.remove(), 320);
-            // 放射線動畫
-            for (let i = 0; i < 8; i++) {
-                const angle = (i * 45) * Math.PI / 180;
-                const length = 32;
-                const ray = document.createElement('div');
-                ray.className = 'bomb-ray';
-                ray.style.position = 'absolute';
-                ray.style.left = (bombRect.left - boardRect.left + bombRect.width / 2) + 'px';
-                ray.style.top = (bombRect.top - boardRect.top + bombRect.height / 2) + 'px';
-                ray.style.width = length + 'px';
-                ray.style.height = '3px';
-                ray.style.background = 'linear-gradient(90deg, #fff 0%, #F9A03F 100%)';
-                ray.style.transform = `rotate(${i * 45}deg)`;
-                ray.style.transformOrigin = '0 50%';
-                ray.style.opacity = '0.85';
-                ray.style.borderRadius = '2px';
-                ray.style.pointerEvents = 'none';
-                ray.style.zIndex = '1001';
-                ray.style.animation = 'bomb-ray-appear 0.32s linear forwards';
-                lineContainer.appendChild(ray);
-                setTimeout(() => ray.remove(), 320);
-            }
-            promises.push(new Promise(resolve => {
-                setTimeout(() => {
-                    resolve();
-                }, 320);
-            }));
-        });
-        await Promise.all(promises);
+        return Promise.resolve();
     }
 
     function setupEventListeners() {
