@@ -467,4 +467,18 @@ body {
 }
 .bomb-ray {
     animation: bomb-ray-appear 0.32s linear forwards;
+}
+
+.highlight-bomb-link {
+    box-shadow: 0 0 16px 4px #ffe066, 0 0 0 3px #ffe066 inset;
+    border: 2.5px solid #ffe066 !important;
+    z-index: 10;
+    transition: box-shadow 0.1s, border 0.1s;
+}
+
+.bomb-triggered {
+    background: #e53935 !important;
+    border: 2.5px solid #ff5252 !important;
+    box-shadow: 0 0 16px 4px #ff5252, 0 0 0 3px #ff5252 inset;
+    transition: background 0.10s, border 0.10s, box-shadow 0.10s;
 } 
