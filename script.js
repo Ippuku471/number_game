@@ -267,8 +267,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Add a slight pause after landing before checking for matches
         await new Promise(resolve => setTimeout(resolve, 100)); 
 
+        // 只在所有 combo/消除/爆炸完全結束後才 movesLeft--
         await handleMatches();
 
+        // === movesLeft-- 與加新行的判斷移到這裡 ===
         movesLeft--;
         updateTimerUI();
 
@@ -300,10 +302,32 @@ document.addEventListener('DOMContentLoaded', () => {
             chainCount++;
             if (chainCount > maxCombo) maxCombo = chainCount;
             updateComboUI(chainCount);
-            const numberMatches = findBlocksToClear();
+            let numberMatches = findBlocksToClear();
             // 死循環防呆：若本輪消除集合和上一輪完全一樣，強制 break
             const numberMatchesKey = Array.from(numberMatches).sort().join(',');
             if (numberMatchesKey === lastNumberMatchesKey && numberMatches.size > 0) {
+                // break 前再強制執行一次消除
+                if (numberMatches.size > 0) {
+                    let comboMultiplier = chainCount;
+                    numberMatches.forEach(blockString => {
+                        const { row, col } = JSON.parse(blockString);
+                        const block = boardState[row][col];
+                        if (block && block.type === 'number') {
+                            let base = block.number * 40;
+                            let finalScore = base * comboMultiplier;
+                            score += finalScore;
+                            showScoreFloat(row, col, finalScore, false, 'number', comboMultiplier);
+                        }
+                    });
+                    await animateClearance(numberMatches);
+                    triggerBombsForClearedNumbers(numberMatches); // 先觸發炸彈
+                    await flashUnlocked(numberMatches); // 再解鎖
+                    clearBlocksFromState(numberMatches); // 最後消除
+                    applyGravity();
+                    renderBoard();
+                    updateScoreUI();
+                    await new Promise(resolve => setTimeout(resolve, 350));
+                }
                 break;
             }
             lastNumberMatchesKey = numberMatchesKey;
@@ -318,9 +342,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 if (hasTriggeredBomb) break;
-            }
-            if (numberMatches.size > 0 || hasTriggeredBomb) {
-                chainReaction = true;
             }
             if (numberMatches.size > 0) {
                 let comboMultiplier = chainCount;
@@ -396,14 +417,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 block.bombState = 'triggered';
                             }
                             hit--;
-                            // 需要重新取得 block 以反映型態變化
                             block = boardState[r][c];
                         }
                     }
                 }
-                // 爆炸動畫顯示一段時間
                 await new Promise(resolve => setTimeout(resolve, 300));
-                // 爆炸後將 exploded 的炸彈格子設為 null（消除）
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         const block = boardState[r][c];
@@ -412,11 +430,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
-                applyGravity(); // 讓上方方塊掉下來
+                applyGravity();
+                console.log('after gravity, can clear:', Array.from(findBlocksToClear()));
                 renderBoard();
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // === while 迴圈結尾，重新檢查可消除格子與炸彈 ===
+            numberMatches = findBlocksToClear();
+            hasTriggeredBomb = false;
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const block = boardState[r][c];
+                    if (block && block.type === 'bomb' && block.bombState === 'triggered') {
+                        hasTriggeredBomb = true;
+                        break;
+                    }
+                }
+                if (hasTriggeredBomb) break;
+            }
+            if (numberMatches.size > 0 || hasTriggeredBomb) {
+                chainReaction = true;
+            }
         }
         currentComboMultiplier = maxCombo > 0 ? maxCombo : 1;
         if (maxCombo > maxComboRecord) maxComboRecord = maxCombo;
@@ -430,19 +464,21 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let r = 0; r < gridSize; r++) {
             let c = 0;
             while (c < gridSize) {
-                // 找到一段連續非空格
                 if (boardState[r][c]) {
                     let start = c;
                     while (c + 1 < gridSize && boardState[r][c + 1]) c++;
                     let end = c;
                     let length = end - start + 1;
-                    // 檢查這段內所有 type 為 number 的格子
+                    let segment = [];
                     for (let cc = start; cc <= end; cc++) {
                         const block = boardState[r][cc];
+                        segment.push(block ? (block.type + ':' + block.number) : '.');
                         if (block && block.type === 'number' && block.number === length) {
                             blocksToClear.add(JSON.stringify({ row: r, col: cc }));
+                            console.log(`[findBlocksToClear] 橫向加入消除: row=${r}, col=${cc}, type=${block.type}, number=${block.number}, 區段長度=${length}`);
                         }
                     }
+                    console.log(`row ${r} segment [${start}-${end}] len=${length}:`, segment.join(','));
                     c = end + 1;
                 } else {
                     c++;
@@ -458,18 +494,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     while (r + 1 < gridSize && boardState[r + 1][c]) r++;
                     let end = r;
                     let length = end - start + 1;
+                    let segment = [];
                     for (let rr = start; rr <= end; rr++) {
                         const block = boardState[rr][c];
+                        segment.push(block ? (block.type + ':' + block.number) : '.');
                         if (block && block.type === 'number' && block.number === length) {
                             blocksToClear.add(JSON.stringify({ row: rr, col: c }));
+                            console.log(`[findBlocksToClear] 縱向加入消除: row=${rr}, col=${c}, type=${block.type}, number=${block.number}, 區段長度=${length}`);
                         }
                     }
+                    console.log(`col ${c} segment [${start}-${end}] len=${length}:`, segment.join(','));
                     r = end + 1;
                 } else {
                     r++;
                 }
             }
         }
+        console.log('[findBlocksToClear] blocksToClear:', Array.from(blocksToClear));
         return blocksToClear;
     }
 
@@ -612,13 +653,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const { row, col } = JSON.parse(blockString);
             const block = boardState[row][col];
             if (block && block.type === 'number') {
+                console.log(`[clearBlocksFromState] 消除: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
                 boardState[row][col] = null;
             } else {
                 // debug log
                 if (block) {
-                    console.log('未消除格子', row, col, block.type, block.number);
+                    console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
+                } else {
+                    console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, block=null`);
                 }
             }
+            console.log('[clearBlocksFromState] boardState after clear:', JSON.parse(JSON.stringify(boardState)));
         });
     }
 
@@ -1026,11 +1071,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // === 主初始化 ===
     init();
-    const testBtn = document.getElementById('test-btn');
-    if (testBtn) {
-        testBtn.onclick = () => {
-            localStorage.removeItem('tutorialSeen');
-            showInteractiveTutorial();
-        };
-    }
 }); 
