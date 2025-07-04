@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>數字方塊遊戲 eighty-eight</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#23272f">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed:400,700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="main-bg">
+        <div class="game-container">
+            <div class="game-header">
+                <div class="next-block-preview" title="下一顆"></div>
+                <div class="level-display">Lv.1</div>
+                <div class="score-display">0</div>
+                <div class="combo-display">Combo: 0</div>
+            </div>
+            <div class="game-board">
+                <div class="line-container"></div>
+                <!-- 棋盤格子由 JS 動態產生 -->
+            </div>
+            <div class="level-row">
+                <div class="level-timer"></div>
+                <button class="restart-btn" title="重新開始">&#x21bb;</button>
+            </div>
+            <div class="tutorial-tip" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- 遊戲結束彈窗 -->
+    <div class="game-over-modal" style="display:none;position:fixed;z-index:2000;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;">
+        <div style="background:#fff;padding:32px 24px;border-radius:16px;max-width:90vw;width:350px;box-shadow:0 4px 32px #0002;text-align:center;">
+            <div style="font-size:1.4em;font-weight:bold;margin-bottom:12px;">遊戲結束</div>
+            <div class="final-score" style="font-size:1.1em;margin-bottom:8px;">分數：0</div>
+            <div class="final-combo" style="font-size:1.1em;margin-bottom:24px;">最大Combo：0</div>
+            <button class="restart-btn" style="font-size:1em;padding:8px 24px;border:none;border-radius:8px;background:#1976d2;color:#fff;cursor:pointer;">重新開始</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+    </script>
+</body>
+</html> 
