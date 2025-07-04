@@ -77,7 +77,7 @@ body {
     padding: 0 4px;
 }
 
-.level-timer {
+.left-moves {
     display: flex;
     gap: 6px;
     align-items: center;
@@ -151,7 +151,7 @@ body {
     -ms-user-select: none;
 }
 
-.cell[data-type="grey"] {
+.cell[data-type="hidden"] {
     background: #b0b3bb;
 }
 
