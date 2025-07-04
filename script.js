@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const gameBoard = document.querySelector('.game-board');
     const nextBlockPreview = document.querySelector('.next-block-preview');
-    const levelTimer = document.querySelector('.level-timer');
+    const leftMoves = document.querySelector('.left-moves');
     
     let boardState = [];
     let nextBlock = null;
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 createBoard();
                 initializeBoardState();
                 setupEventListeners();
-                boardState[7][2] = { type: 'grey', isBomb: false };
+                boardState[7][2] = { type: 'hidden', isBomb: false };
                 boardState[7][3] = { type: 'number', number: 2 };
                 nextBlock = { type: 'number', number: 3 };
                 renderBoard();
@@ -116,14 +116,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function createBottomBlock() {
+    function generateBottomBlock() {
         const rand = Math.random();
         if (rand < 0.05) { // 5% chance of a revealed bomb
             return { type: 'bomb', isBomb: true, bombState: 'idle' };
         } else if (rand < 0.20) { // 15% chance of a hidden bomb
-            return { type: 'grey', isBomb: true };
-        } else { // 80% chance of a normal grey block
-            return { type: 'grey', isBomb: false };
+            return { type: 'hidden', isBomb: true };
+        } else { // 80% chance of a normal hidden block
+            return { type: 'hidden', isBomb: false };
         }
     }
 
@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.style.backgroundImage = '';
 
                 if (block) {
-                    const displayType = (block.type === 'grey' && block.isBomb) ? 'grey' : block.type;
+                    const displayType = (block.type === 'hidden' && block.isBomb) ? 'hidden' : block.type;
                     cell.dataset.type = displayType;
                     
                     if (block.type === 'number' || block.type === 'striped') {
@@ -212,15 +212,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateTimerUI() {
-        levelTimer.innerHTML = '';
+    function updateLeftMovesUI() {
+        leftMoves.innerHTML = '';
         for (let i = 0; i < movesPerLevel; i++) {
             const dot = document.createElement('div');
             dot.classList.add('timer-dot');
             if (i >= movesLeft) {
                 dot.classList.add('inactive');
             }
-            levelTimer.appendChild(dot);
+            leftMoves.appendChild(dot);
         }
     }
 
@@ -272,10 +272,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // === movesLeft-- 與加新行的判斷移到這裡 ===
         movesLeft--;
-        updateTimerUI();
+        updateLeftMovesUI();
 
         if (movesLeft === 0) {
-            await addNewRow();
+            await advanceLevel();
             await handleMatches(); // Check for matches caused by the new row
         }
 
@@ -300,18 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (chainCount > maxCombo) maxCombo = chainCount;
             updateComboUI(chainCount);
             let numberMatches = findBlocksToClear();
-            let hasTriggeredBomb = false;
-            for (let r = 0; r < gridSize; r++) {
-                for (let c = 0; c < gridSize; c++) {
-                    const block = boardState[r][c];
-                    if (block && block.type === 'bomb' && block.bombState === 'triggered') {
-                        hasTriggeredBomb = true;
-                        break;
-                    }
-                }
-                if (hasTriggeredBomb) break;
-            }
-            if (numberMatches.size === 0 && !hasTriggeredBomb) {
+            if (numberMatches.size === 0) {
                 break;
             }
             if (numberMatches.size > 0) {
@@ -366,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         let hit = bombHitMap[r][c];
                         let block = boardState[r][c];
                         while (hit > 0 && block) {
-                            if (block.type === 'grey') {
+                            if (block.type === 'hidden') {
                                 if (block.isBomb) {
                                     block.type = 'bomb';
                                     block.bombState = 'idle';
@@ -575,7 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const nCol = col + delta.c;
                     if (nRow >= 0 && nRow < gridSize && nCol >= 0 && nCol < gridSize) {
                         const neighbor = boardState[nRow][nCol];
-                        if (neighbor && neighbor.type === 'grey') {
+                        if (neighbor && neighbor.type === 'hidden') {
                             if (neighbor.isBomb) {
                                 neighbor.type = 'bomb';
                                 neighbor.bombState = 'idle';
@@ -618,7 +607,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function addNewRow() {
+    async function advanceLevel() {
         if (checkGameOver(true)) {
             isGameOver = true;
             setTimeout(() => showGameOver(), 100);
@@ -631,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         boardState[gridSize - 1] = [];
         for (let c = 0; c < gridSize; c++) {
-            const newBlock = createBottomBlock();
+            const newBlock = generateBottomBlock();
             boardState[gridSize - 1][c] = newBlock;
             if (newBlock.isBomb) {
                 console.log(`A ${newBlock.type === 'bomb' ? 'REVEALED' : 'hidden'} bomb was created at row ${gridSize - 1}, col ${c}`);
@@ -643,7 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
         movesLeft = movesPerLevel;
         
         renderBoard();
-        updateTimerUI();
+        updateLeftMovesUI();
         await new Promise(resolve => setTimeout(resolve, 300));
         saveGameState();
     }
@@ -695,43 +684,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         await Promise.all(promises);
         await new Promise(resolve => setTimeout(resolve, 300)); // 統一延遲 300ms
-    }
-
-    async function animateLaserToBombsWithTriggers(clearedBlocks, bombs, triggerMap) {
-        // 先把本輪被消除的數字方塊座標做成集合
-        const clearedSet = new Set();
-        clearedBlocks.forEach(blockString => {
-            const { row, col } = JSON.parse(blockString);
-            clearedSet.add(`${row},${col}`);
-        });
-        // 傳遞感動畫：先高亮數字方塊，延遲0.15秒後高亮炸彈
-        bombs.forEach(bombString => {
-            const triggerInfo = triggerMap.get(bombString);
-            if (triggerInfo) {
-                const { row: triggerRow, col: triggerCol } = triggerInfo;
-                const { row: bombRow, col: bombCol } = JSON.parse(bombString);
-                if (
-                    clearedSet.has(`${triggerRow},${triggerCol}`) &&
-                    boardState[triggerRow][triggerCol] &&
-                    boardState[triggerRow][triggerCol].type === 'number' &&
-                    boardState[bombRow][bombCol] &&
-                    boardState[bombRow][bombCol].type === 'bomb' &&
-                    !(triggerRow === bombRow && triggerCol === bombCol)
-                ) {
-                    const triggerCell = getCellElement(triggerRow, triggerCol);
-                    const bombCell = getCellElement(bombRow, bombCol);
-                    if (triggerCell) triggerCell.classList.add('highlight-bomb-link');
-                    setTimeout(() => {
-                        if (triggerCell) triggerCell.classList.remove('highlight-bomb-link');
-                        if (bombCell) bombCell.classList.add('highlight-bomb-link');
-                        setTimeout(() => {
-                            if (bombCell) bombCell.classList.remove('highlight-bomb-link');
-                        }, 150);
-                    }, 150);
-                }
-            }
-        });
-        return Promise.resolve();
     }
 
     function setupEventListeners() {
@@ -809,7 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setupEventListeners();
             renderBoard();
             updatePreview();
-            updateTimerUI();
+            updateLeftMovesUI();
             updateScoreUI();
             updateLevelUI();
             updateComboUI(currentComboMultiplier);
@@ -821,7 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         generateNewBlock();
         renderBoard();
-        updateTimerUI();
+        updateLeftMovesUI();
         updateScoreUI();
         updateLevelUI();
         updateComboUI(0);
@@ -944,7 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         generateNewBlock();
         renderBoard();
-        updateTimerUI();
+        updateLeftMovesUI();
         updateScoreUI();
         updateLevelUI();
         updateComboUI(0);
