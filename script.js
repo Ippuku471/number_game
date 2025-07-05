@@ -308,11 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 numberMatches.forEach(blockString => {
                     const { row, col } = JSON.parse(blockString);
                     const block = boardState[row][col];
-                    if (block && block.type === 'number') {
-                        let base = block.number * 40;
-                        let finalScore = base * comboMultiplier;
-                        score += finalScore;
-                        showScoreFloat(row, col, finalScore, false, 'number', comboMultiplier);
+                    if (block) {
+                        const baseScore = calculateBaseScore(block);
+                        const scoreResult = addScore(baseScore, comboMultiplier);
+                        showScoreFloat(row, col, scoreResult.finalScore, false, block.type, comboMultiplier, scoreResult.comment);
                     }
                 });
                 await animateClearance(numberMatches);
@@ -413,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let cc = start; cc <= end; cc++) {
                         const block = boardState[r][cc];
                         segment.push(block ? (block.type + ':' + block.number) : '.');
-                        if (block && block.type === 'number' && block.number === length) {
+                        if (block && (block.type === 'number' || block.type === 'striped') && block.number === length) {
                             blocksToClear.add(JSON.stringify({ row: r, col: cc }));
                             console.log(`[findBlocksToClear] 橫向加入消除: row=${r}, col=${cc}, type=${block.type}, number=${block.number}, 區段長度=${length}`);
                         }
@@ -438,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let rr = start; rr <= end; rr++) {
                         const block = boardState[rr][c];
                         segment.push(block ? (block.type + ':' + block.number) : '.');
-                        if (block && block.type === 'number' && block.number === length) {
+                        if (block && (block.type === 'number' || block.type === 'striped') && block.number === length) {
                             blocksToClear.add(JSON.stringify({ row: rr, col: c }));
                             console.log(`[findBlocksToClear] 縱向加入消除: row=${rr}, col=${c}, type=${block.type}, number=${block.number}, 區段長度=${length}`);
                         }
@@ -592,16 +591,11 @@ document.addEventListener('DOMContentLoaded', () => {
          blocksToClear.forEach((blockString) => {
             const { row, col } = JSON.parse(blockString);
             const block = boardState[row][col];
-            if (block && block.type === 'number') {
+            if (block) {
                 console.log(`[clearBlocksFromState] 消除: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
                 boardState[row][col] = null;
             } else {
-                // debug log
-                if (block) {
-                    console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
-                } else {
-                    console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, block=null`);
-                }
+                console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, block=null`);
             }
             console.log('[clearBlocksFromState] boardState after clear:', JSON.parse(JSON.stringify(boardState)));
         });
@@ -803,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function showScoreFloat(row, col, gain, isBomb = false, type = 'number', combo = 1) {
+    function showScoreFloat(row, col, gain, isBomb = false, type = 'number', combo = 1, comment = '') {
         const gameBoard = document.querySelector('.game-board');
         const lineContainer = document.querySelector('.line-container');
         if (!gameBoard || !lineContainer) return;
@@ -813,19 +807,22 @@ document.addEventListener('DOMContentLoaded', () => {
         float.className = 'score-float';
         float.textContent = (isBomb ? '💣' : '') + `+${gain}`;
 
-        // 根據 combo 數決定顏色與字樣
-        if (combo >= 2 && combo <= 3) {
-            float.classList.add('combo-amazing');
-            float.textContent = 'amazing!\n' + float.textContent;
-        } else if (combo >= 4 && combo <= 5) {
-            float.classList.add('combo-fantastic');
-            float.textContent = 'fantastic!\n' + float.textContent;
-        } else if (combo >= 6 && combo <= 7) {
-            float.classList.add('combo-incredible');
-            float.textContent = 'incredible!\n' + float.textContent;
-        } else if (combo >= 8) {
-            float.classList.add('combo-unbelievable');
-            float.textContent = 'unbelievable!\n' + float.textContent;
+        // 根據評語決定顏色與字樣
+        if (comment) {
+            float.textContent = comment + '\n' + float.textContent;
+            
+            // 根據評語設定CSS類別
+            if (comment === 'nice!') {
+                float.classList.add('combo-amazing');
+            } else if (comment === 'amazing!') {
+                float.classList.add('combo-amazing');
+            } else if (comment === 'fantastic!') {
+                float.classList.add('combo-fantastic');
+            } else if (comment === 'incredible!') {
+                float.classList.add('combo-incredible');
+            } else if (comment === 'unbelievable!') {
+                float.classList.add('combo-unbelievable');
+            }
         }
 
         // 灰底
@@ -970,6 +967,77 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+    }
+
+    // === 計分系統常數 ===
+    const SCORE_CONSTANTS = {
+        // 基礎分數
+        NUMBER_BLOCK_BASE: 20,  // 數字格子基礎分數
+        LOCKED_BLOCK: 200,      // 鎖住格子分數
+        HALF_LOCKED_BLOCK: 80,  // 半鎖格子分數
+        BOMB_BLOCK: 100,        // 炸彈格子分數
+        
+        // 評語門檻
+        NICE_THRESHOLD: 500,
+        AMAZING_THRESHOLD: 1000,
+        FANTASTIC_THRESHOLD: 3000,
+        INCREDIBLE_THRESHOLD: 6000,
+        UNBELIEVABLE_THRESHOLD: 10000
+    };
+
+    // === 計分系統函數 ===
+    function calculateBaseScore(block) {
+        if (!block) return 0;
+        
+        switch (block.type) {
+            case 'number':
+            case 'striped':
+                return block.number * SCORE_CONSTANTS.NUMBER_BLOCK_BASE;
+            case 'locked':
+                return SCORE_CONSTANTS.LOCKED_BLOCK;
+            case 'half-locked':
+                return SCORE_CONSTANTS.HALF_LOCKED_BLOCK;
+            case 'bomb':
+                return SCORE_CONSTANTS.BOMB_BLOCK;
+            default:
+                return 0;
+        }
+    }
+
+    function calculateComboMultiplier(combo) {
+        if (combo <= 1) return 1;
+        return combo * combo; // combo²
+    }
+
+    function getScoreComment(score) {
+        if (score < SCORE_CONSTANTS.NICE_THRESHOLD) {
+            return '';
+        } else if (score < SCORE_CONSTANTS.AMAZING_THRESHOLD) {
+            return 'nice!';
+        } else if (score < SCORE_CONSTANTS.FANTASTIC_THRESHOLD) {
+            return 'amazing!';
+        } else if (score < SCORE_CONSTANTS.INCREDIBLE_THRESHOLD) {
+            return 'fantastic!';
+        } else if (score < SCORE_CONSTANTS.UNBELIEVABLE_THRESHOLD) {
+            return 'incredible!';
+        } else {
+            return 'unbelievable!';
+        }
+    }
+
+    function addScore(baseScore, combo = 1) {
+        const comboMultiplier = calculateComboMultiplier(combo);
+        const finalScore = baseScore * comboMultiplier;
+        score += finalScore;
+        
+        console.log(`[計分] 基礎分數: ${baseScore}, Combo: ${combo}, 倍數: ${comboMultiplier}, 最終分數: ${finalScore}, 總分: ${score}`);
+        
+        return {
+            baseScore,
+            comboMultiplier,
+            finalScore,
+            comment: getScoreComment(finalScore)
+        };
     }
 
     // === 主初始化 ===
