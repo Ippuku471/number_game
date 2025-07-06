@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const displayType = (block.type === 'hidden' && block.isBomb) ? 'hidden' : block.type;
                     cell.dataset.type = displayType;
                     
-                    if (block.type === 'number' || block.type === 'striped') {
+                    if (block.type === 'number') {
                         cell.textContent = block.number;
                         cell.dataset.number = block.number;
                     }
@@ -378,11 +378,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                         block.number = Math.floor(Math.random() * 8) + 1;
                                     }
                                 }
-                            } else if (block.type === 'striped') {
-                                block.type = 'number';
-                                if (typeof block.number !== 'number') {
-                                    block.number = Math.floor(Math.random() * 8) + 1;
-                                }
                             } else if (block.type === 'bomb' && block.bombState === 'idle') {
                                 block.bombState = 'triggered';
                             }
@@ -426,7 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let cc = start; cc <= end; cc++) {
                         const block = boardState[r][cc];
                         segment.push(block ? (block.type + ':' + block.number) : '.');
-                        if (block && (block.type === 'number' || block.type === 'striped') && block.number === length) {
+                        if (block && block.type === 'number' && block.number === length) {
                             blocksToClear.add(JSON.stringify({ row: r, col: cc }));
                             console.log(`[findBlocksToClear] 橫向加入消除: row=${r}, col=${cc}, type=${block.type}, number=${block.number}, 區段長度=${length}`);
                         }
@@ -451,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (let rr = start; rr <= end; rr++) {
                         const block = boardState[rr][c];
                         segment.push(block ? (block.type + ':' + block.number) : '.');
-                        if (block && (block.type === 'number' || block.type === 'striped') && block.number === length) {
+                        if (block && block.type === 'number' && block.number === length) {
                             blocksToClear.add(JSON.stringify({ row: rr, col: c }));
                             console.log(`[findBlocksToClear] 縱向加入消除: row=${rr}, col=${c}, type=${block.type}, number=${block.number}, 區段長度=${length}`);
                         }
@@ -597,18 +592,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                 neighbor.number = Math.floor(Math.random() * 8) + 1;
                             }
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'number', number: neighbor.number});
-                        } else if (neighbor && (neighbor.type === 'locked' || neighbor.type === 'half-locked')) {
-                            // 處理鎖住和半鎖格子的解鎖
-                            if (neighbor.type === 'locked') {
-                                neighbor.type = 'half-locked';
-                                unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
-                            } else if (neighbor.type === 'half-locked') {
-                                neighbor.type = 'number';
-                                if (typeof neighbor.number !== 'number') {
-                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
-                                }
-                                unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
+                        } else if (neighbor && neighbor.type === 'locked') {
+                            // 鎖住格子 → 半鎖格子
+                            neighbor.type = 'half-locked';
+                            unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
+                        } else if (neighbor && neighbor.type === 'half-locked') {
+                            // 半鎖格子 → 數字格子
+                            neighbor.type = 'number';
+                            if (typeof neighbor.number !== 'number') {
+                                neighbor.number = Math.floor(Math.random() * 8) + 1;
                             }
+                            unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
                         }
                     }
                 });
@@ -632,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
          blocksToClear.forEach((blockString) => {
             const { row, col } = JSON.parse(blockString);
             const block = boardState[row][col];
-            if (block && (block.type === 'number' || block.type === 'striped')) {
+            if (block && block.type === 'number') {
                 console.log(`[clearBlocksFromState] 消除: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
                 boardState[row][col] = null;
             } else {
@@ -705,13 +699,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const cell = getCellElement(row, col);
             const block = boardState[row][col];
 
-            if (cell && block) {
+            if (cell && block && block.type === 'number') {
                 cell.textContent = ''; // 動畫一開始就清空數字
-                const animationClass = (block.type === 'number') ? 'clearing-color' : 'clearing-special';
-                cell.classList.add(animationClass);
+                cell.classList.add('clearing-color');
                 promises.push(new Promise(resolve => {
                     cell.addEventListener('animationend', () => {
-                        cell.classList.remove(animationClass);
+                        cell.classList.remove('clearing-color');
                         resolve();
                     }, { once: true });
                 }));
@@ -1032,7 +1025,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         switch (block.type) {
             case 'number':
-            case 'striped':
                 return block.number * SCORE_CONSTANTS.NUMBER_BLOCK_BASE;
             case 'locked':
                 return SCORE_CONSTANTS.LOCKED_BLOCK;
