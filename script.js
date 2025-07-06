@@ -292,19 +292,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function handleMatches() {
-        let combo = 0;
-        let maxCombo = 0;
+        // combo從全域currentComboMultiplier繼續累積
+        let combo = currentComboMultiplier || 0;
+        let maxCombo = combo;
         while (true) {
             let numberMatches = findBlocksToClear();
-            if (numberMatches.size === 0) {
+            // 檢查場上是否有triggered狀態的炸彈
+            let hasTriggeredBomb = false;
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const block = boardState[r][c];
+                    if (block && block.type === 'bomb' && block.bombState === 'triggered') {
+                        hasTriggeredBomb = true;
+                        break;
+                    }
+                }
+                if (hasTriggeredBomb) break;
+            }
+            // 若沒有可消除方塊且沒有triggered炸彈，才break
+            if (numberMatches.size === 0 && !hasTriggeredBomb) {
                 break;
             }
-            
-            // 每次消除時combo+1
+            // 每次消除時combo+1（只要有消除或有炸彈爆炸都算一波）
             combo++;
             if (combo > maxCombo) maxCombo = combo;
             updateComboUI(combo);
-            
+            // 處理消除
             if (numberMatches.size > 0) {
                 numberMatches.forEach(blockString => {
                     const { row, col } = JSON.parse(blockString);
@@ -322,9 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 applyGravity();
                 renderBoard();
                 updateScoreUI();
-                await new Promise(resolve => setTimeout(resolve, 350));
+                await new Promise(resolve => setTimeout(resolve, 550)); // 550ms等待
             }
-            // 2. 爆炸所有 triggered 的炸彈
+            // 處理所有triggered炸彈爆炸
             let anyBombExploded = false;
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
@@ -340,7 +353,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 處理爆炸範圍
                 const bombHitMap = Array.from({length: gridSize}, () => Array(gridSize).fill(0));
                 const explodedBombs = [];
-                
                 // 收集所有爆炸的炸彈
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
@@ -354,14 +366,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
-                
                 // 計算炸彈爆炸分數
                 explodedBombs.forEach(({row, col}) => {
                     const baseScore = calculateBaseScore({type: 'bomb'});
                     const scoreResult = addScore(baseScore, combo);
                     showScoreFloat(row, col, scoreResult.finalScore, false, 'bomb', combo, scoreResult.comment);
                 });
-                
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         let hit = bombHitMap[r][c];
@@ -387,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
-                await new Promise(resolve => setTimeout(resolve, 300));
+                await new Promise(resolve => setTimeout(resolve, 550)); // 550ms等待
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         const block = boardState[r][c];
@@ -873,10 +883,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function showGameOver() {
         const modal = document.querySelector('.game-over-modal');
         const scoreDiv = document.querySelector('.final-score');
-        const comboDiv = document.querySelector('.final-combo');
-        if (modal && scoreDiv && comboDiv) {
+        const levelDiv = document.querySelector('.final-level');
+        const historyScoreDiv = document.querySelector('.history-score');
+        const historyLevelDiv = document.querySelector('.history-level');
+        const historyTitle = document.querySelector('.history-title');
+        if (modal && scoreDiv && levelDiv && historyScoreDiv && historyLevelDiv && historyTitle) {
             scoreDiv.textContent = `分數：${score}`;
-            comboDiv.textContent = `最大Combo：${maxComboRecord}`;
+            levelDiv.textContent = `到達關卡：${level}`;
+            setHistoryRecord(score, level);
+            const history = getHistoryRecord();
+            historyScoreDiv.textContent = `最高分：${history.score}`;
+            historyLevelDiv.textContent = `最高關卡：${history.level}`;
             modal.style.display = 'flex';
         }
     }
@@ -887,13 +904,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupRestartButton() {
-        const btn = document.querySelector('.restart-btn');
-        if (btn) {
+        const btns = document.querySelectorAll('.restart-btn');
+        btns.forEach(btn => {
             btn.onclick = () => {
                 hideGameOver();
                 restartGame();
             };
-        }
+        });
     }
 
     function restartGame() {
@@ -1057,6 +1074,23 @@ document.addEventListener('DOMContentLoaded', () => {
             finalScore,
             comment: getScoreComment(finalScore)
         };
+    }
+
+    // 最高分與最高關卡紀錄
+    function getHistoryRecord() {
+        const data = localStorage.getItem('numberGameHistory');
+        if (!data) return { score: 0, level: 1 };
+        try {
+            return JSON.parse(data);
+        } catch {
+            return { score: 0, level: 1 };
+        }
+    }
+    function setHistoryRecord(score, level) {
+        const old = getHistoryRecord();
+        if (score > old.score || (score === old.score && level > old.level)) {
+            localStorage.setItem('numberGameHistory', JSON.stringify({ score, level }));
+        }
     }
 
     // === 主初始化 ===

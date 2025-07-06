@@ -156,7 +156,8 @@ body {
 }
 
 .cell[data-type="half-locked"] {
-    background: #6a6d76;
+    background: #6a6d76 !important;
+    color: #fff;
 }
 
 .cell[data-type="bomb"] {
