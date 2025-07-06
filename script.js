@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 explodedBombs.forEach(({row, col}) => {
                     const baseScore = calculateBaseScore({type: 'bomb'});
                     const scoreResult = addScore(baseScore, combo);
-                    showScoreFloat(row, col, scoreResult.finalScore, true, 'bomb', combo, scoreResult.comment);
+                    showScoreFloat(row, col, scoreResult.finalScore, false, 'bomb', combo, scoreResult.comment);
                 });
                 
                 for (let r = 0; r < gridSize; r++) {

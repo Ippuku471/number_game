@@ -151,13 +151,12 @@ body {
     -ms-user-select: none;
 }
 
-.cell[data-type="hidden"] {
-    background: #b0b3bb;
+.cell[data-type="locked"] {
+    background: #4a4d56;
 }
 
-.cell[data-type="striped"] {
-    background: #8a8d99 !important;
-    background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,0.18), rgba(255,255,255,0.18) 4px, transparent 4px, transparent 8px);
+.cell[data-type="half-locked"] {
+    background: #6a6d76;
 }
 
 .cell[data-type="bomb"] {
