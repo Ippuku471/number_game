@@ -293,30 +293,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function handleMatches() {
-        let chainCount = 0;
+        let combo = 0;
         let maxCombo = 0;
         while (true) {
-            chainCount++;
-            if (chainCount > maxCombo) maxCombo = chainCount;
-            updateComboUI(chainCount);
             let numberMatches = findBlocksToClear();
             if (numberMatches.size === 0) {
                 break;
             }
+            
+            // 每次消除時combo+1
+            combo++;
+            if (combo > maxCombo) maxCombo = combo;
+            updateComboUI(combo);
+            
             if (numberMatches.size > 0) {
-                let comboMultiplier = chainCount;
                 numberMatches.forEach(blockString => {
                     const { row, col } = JSON.parse(blockString);
                     const block = boardState[row][col];
                     if (block) {
                         const baseScore = calculateBaseScore(block);
-                        const scoreResult = addScore(baseScore, comboMultiplier);
-                        showScoreFloat(row, col, scoreResult.finalScore, false, block.type, comboMultiplier, scoreResult.comment);
+                        const scoreResult = addScore(baseScore, combo);
+                        showScoreFloat(row, col, scoreResult.finalScore, false, block.type, combo, scoreResult.comment);
                     }
                 });
                 await animateClearance(numberMatches);
                 triggerBombsForClearedNumbers(numberMatches); // 先觸發炸彈
-                await flashUnlocked(numberMatches); // 再解鎖
+                await flashUnlocked(numberMatches, combo); // 再解鎖
                 clearBlocksFromState(numberMatches); // 最後消除
                 applyGravity();
                 renderBoard();
@@ -338,10 +340,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (anyBombExploded) {
                 // 處理爆炸範圍
                 const bombHitMap = Array.from({length: gridSize}, () => Array(gridSize).fill(0));
+                const explodedBombs = [];
+                
+                // 收集所有爆炸的炸彈
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         const block = boardState[r][c];
                         if (block && block.type === 'bomb' && block.bombState === 'exploded') {
+                            explodedBombs.push({row: r, col: c});
                             const area = getBombArea(r, c);
                             area.forEach(pos => {
                                 bombHitMap[pos.row][pos.col]++;
@@ -349,6 +355,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
+                
+                // 計算炸彈爆炸分數
+                explodedBombs.forEach(({row, col}) => {
+                    const baseScore = calculateBaseScore({type: 'bomb'});
+                    const scoreResult = addScore(baseScore, combo);
+                    showScoreFloat(row, col, scoreResult.finalScore, true, 'bomb', combo, scoreResult.comment);
+                });
+                
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         let hit = bombHitMap[r][c];
@@ -546,7 +560,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return area;
     }
 
-    async function flashUnlocked(blocksToUnlock) {
+    async function flashUnlocked(blocksToUnlock, combo) {
+        const unlockedBlocks = [];
+        
         blocksToUnlock.forEach((blockString) => {
             const { row, col } = JSON.parse(blockString);
             const block = boardState[row][col];
@@ -567,23 +583,36 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (neighbor.isBomb) {
                                 neighbor.type = 'bomb';
                                 neighbor.bombState = 'idle';
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'bomb'});
                             } else {
                                 neighbor.type = 'striped';
                                 if (typeof neighbor.number !== 'number') {
                                     neighbor.number = Math.floor(Math.random() * 8) + 1;
                                 }
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'striped', number: neighbor.number});
                             }
                         } else if (neighbor && neighbor.type === 'striped') {
                             neighbor.type = 'number';
                             if (typeof neighbor.number !== 'number') {
                                 neighbor.number = Math.floor(Math.random() * 8) + 1;
                             }
+                            unlockedBlocks.push({row: nRow, col: nCol, type: 'number', number: neighbor.number});
                         }
                     }
                 });
             }
         });
+        
+        // 計算解鎖分數
+        unlockedBlocks.forEach(({row, col, type, number}) => {
+            const block = {type, number};
+            const baseScore = calculateBaseScore(block);
+            const scoreResult = addScore(baseScore, combo);
+            showScoreFloat(row, col, scoreResult.finalScore, false, type, combo, scoreResult.comment);
+        });
+        
         renderBoard();
+        updateScoreUI();
         await new Promise(resolve => setTimeout(resolve, 100));
     }
 
