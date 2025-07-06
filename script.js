@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const displayType = (block.type === 'hidden' && block.isBomb) ? 'hidden' : block.type;
                     cell.dataset.type = displayType;
                     
-                    if (block.type === 'number') {
+                    if (block.type === 'number' || block.type === 'half-locked') {
                         cell.textContent = block.number;
                         cell.dataset.number = block.number;
                     }
@@ -580,21 +580,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 neighbor.bombState = 'idle';
                                 unlockedBlocks.push({row: nRow, col: nCol, type: 'bomb'});
                             } else {
-                                neighbor.type = 'striped';
+                                neighbor.type = 'number';
                                 if (typeof neighbor.number !== 'number') {
                                     neighbor.number = Math.floor(Math.random() * 8) + 1;
                                 }
-                                unlockedBlocks.push({row: nRow, col: nCol, type: 'striped', number: neighbor.number});
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'number', number: neighbor.number});
                             }
-                        } else if (neighbor && neighbor.type === 'striped') {
-                            neighbor.type = 'number';
-                            if (typeof neighbor.number !== 'number') {
-                                neighbor.number = Math.floor(Math.random() * 8) + 1;
-                            }
-                            unlockedBlocks.push({row: nRow, col: nCol, type: 'number', number: neighbor.number});
                         } else if (neighbor && neighbor.type === 'locked') {
                             // 鎖住格子 → 半鎖格子
                             neighbor.type = 'half-locked';
+                            if (typeof neighbor.number !== 'number') {
+                                neighbor.number = Math.floor(Math.random() * 8) + 1;
+                            }
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
                         } else if (neighbor && neighbor.type === 'half-locked') {
                             // 半鎖格子 → 數字格子
