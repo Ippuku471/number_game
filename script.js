@@ -120,10 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const rand = Math.random();
         if (rand < 0.05) { // 5% chance of a revealed bomb
             return { type: 'bomb', isBomb: true, bombState: 'idle' };
-        } else if (rand < 0.20) { // 15% chance of a hidden bomb
-            return { type: 'hidden', isBomb: true };
-        } else { // 80% chance of a normal hidden block
-            return { type: 'hidden', isBomb: false };
+        } else if (rand < 0.20) { // 15% chance of a locked block
+            return { type: 'locked', isBomb: false };
+        } else { // 80% chance of a normal locked block
+            return { type: 'locked', isBomb: false };
         }
     }
 
@@ -156,8 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.style.backgroundImage = '';
 
                 if (block) {
-                    const displayType = (block.type === 'hidden' && block.isBomb) ? 'hidden' : block.type;
-                    cell.dataset.type = displayType;
+                    cell.dataset.type = block.type;
                     
                     if (block.type === 'number' || block.type === 'half-locked') {
                         cell.textContent = block.number;
@@ -368,15 +367,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         let hit = bombHitMap[r][c];
                         let block = boardState[r][c];
                         while (hit > 0 && block) {
-                            if (block.type === 'hidden') {
-                                if (block.isBomb) {
-                                    block.type = 'bomb';
-                                    block.bombState = 'idle';
-                                } else {
-                                    block.type = 'striped';
-                                    if (typeof block.number !== 'number') {
-                                        block.number = Math.floor(Math.random() * 8) + 1;
-                                    }
+                            if (block.type === 'locked') {
+                                // 鎖住格子 → 半鎖格子
+                                block.type = 'half-locked';
+                                if (typeof block.number !== 'number') {
+                                    block.number = Math.floor(Math.random() * 8) + 1;
+                                }
+                            } else if (block.type === 'half-locked') {
+                                // 半鎖格子 → 數字格子
+                                block.type = 'number';
+                                if (typeof block.number !== 'number') {
+                                    block.number = Math.floor(Math.random() * 8) + 1;
                                 }
                             } else if (block.type === 'bomb' && block.bombState === 'idle') {
                                 block.bombState = 'triggered';
@@ -574,19 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const nCol = col + delta.c;
                     if (nRow >= 0 && nRow < gridSize && nCol >= 0 && nCol < gridSize) {
                         const neighbor = boardState[nRow][nCol];
-                        if (neighbor && neighbor.type === 'hidden') {
-                            if (neighbor.isBomb) {
-                                neighbor.type = 'bomb';
-                                neighbor.bombState = 'idle';
-                                unlockedBlocks.push({row: nRow, col: nCol, type: 'bomb'});
-                            } else {
-                                neighbor.type = 'number';
-                                if (typeof neighbor.number !== 'number') {
-                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
-                                }
-                                unlockedBlocks.push({row: nRow, col: nCol, type: 'number', number: neighbor.number});
-                            }
-                        } else if (neighbor && neighbor.type === 'locked') {
+                        if (neighbor && neighbor.type === 'locked') {
                             // 鎖住格子 → 半鎖格子
                             neighbor.type = 'half-locked';
                             if (typeof neighbor.number !== 'number') {
