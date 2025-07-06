@@ -232,7 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
         nextBlock = null;
         updatePreview();
 
-        // 清空 combo 顯示
+        // combo歸零（邏輯與UI）
+        currentComboMultiplier = 0;
         updateComboUI(0);
 
         // Simplified check: if the column is full for this type of block
