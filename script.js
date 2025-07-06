@@ -597,6 +597,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 neighbor.number = Math.floor(Math.random() * 8) + 1;
                             }
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'number', number: neighbor.number});
+                        } else if (neighbor && (neighbor.type === 'locked' || neighbor.type === 'half-locked')) {
+                            // 處理鎖住和半鎖格子的解鎖
+                            if (neighbor.type === 'locked') {
+                                neighbor.type = 'half-locked';
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
+                            } else if (neighbor.type === 'half-locked') {
+                                neighbor.type = 'number';
+                                if (typeof neighbor.number !== 'number') {
+                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
+                                }
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
+                            }
                         }
                     }
                 });
@@ -620,11 +632,11 @@ document.addEventListener('DOMContentLoaded', () => {
          blocksToClear.forEach((blockString) => {
             const { row, col } = JSON.parse(blockString);
             const block = boardState[row][col];
-            if (block) {
+            if (block && (block.type === 'number' || block.type === 'striped')) {
                 console.log(`[clearBlocksFromState] 消除: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
                 boardState[row][col] = null;
             } else {
-                console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, block=null`);
+                console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, type=${block ? block.type : 'null'}, number=${block ? block.number : 'null'}`);
             }
             console.log('[clearBlocksFromState] boardState after clear:', JSON.parse(JSON.stringify(boardState)));
         });
