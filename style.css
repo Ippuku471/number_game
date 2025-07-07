@@ -257,38 +257,47 @@ body {
     align-items: center;
 }
 .game-over-content {
-    background: #353942;
+    background: #fff;
     border-radius: 16px;
     padding: 36px 32px 28px 32px;
     box-shadow: 0 2px 16px #0008;
     text-align: center;
-    color: #e3e6ee;
+    color: #23272f;
     min-width: 260px;
+    max-width: 90vw;
+    width: 350px;
+    margin: 0 auto;
 }
-.game-over-content h2 {
+.game-over-title {
     font-size: 2em;
     margin-bottom: 18px;
     color: #F9A03F;
+    font-weight: bold;
 }
-.final-score, .final-combo {
-    font-size: 1.3em;
-    margin: 10px 0;
+.final-score, .final-level, .history-score, .history-level {
+    font-size: 1.2em;
+    margin: 10px 0 4px 0;
+    font-weight: bold;
+}
+.game-over-hr {
+    border: none;
+    border-top: 1.5px solid #e0e0e0;
+    margin: 16px 0 12px 0;
 }
 .restart-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: #23272f;
-    color: #F9A03F;
-    font-size: 1.3em;
+    width: auto;
+    min-width: 120px;
+    height: 40px;
+    border-radius: 8px;
+    background: #1976d2;
+    color: #fff;
+    font-size: 1.1em;
     font-weight: bold;
     border: none;
     box-shadow: 0 1px 4px #0008;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
+    display: inline-block;
+    margin: 18px 0 0 0;
+    padding: 0 32px;
     transition: background 0.18s, color 0.18s;
     cursor: pointer;
 }
@@ -481,4 +490,33 @@ body {
     border: 2.5px solid #ff5252 !important;
     box-shadow: 0 0 16px 4px #ff5252, 0 0 0 3px #ff5252 inset;
     transition: background 0.10s, border 0.10s, box-shadow 0.10s;
+}
+
+/* 主畫面 restart-btn 樣式（黑底橘線圓形） */
+.level-row .restart-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    max-width: 36px !important;
+    max-height: 36px !important;
+    border-radius: 50% !important;
+    background: #23272f !important;
+    color: #F9A03F !important;
+    font-size: 1.3em !important;
+    font-weight: bold !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transition: background 0.18s, color 0.18s;
+    cursor: pointer;
+    line-height: 1 !important;
+}
+.level-row .restart-btn:hover {
+    background: #F9A03F !important;
+    color: #23272f !important;
 } 
