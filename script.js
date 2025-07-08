@@ -887,15 +887,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const levelDiv = document.querySelector('.final-level');
         const historyScoreDiv = document.querySelector('.history-score');
         const historyLevelDiv = document.querySelector('.history-level');
-        const historyTitle = document.querySelector('.history-title');
-        if (modal && scoreDiv && levelDiv && historyScoreDiv && historyLevelDiv && historyTitle) {
+        if (modal && scoreDiv && levelDiv && historyScoreDiv && historyLevelDiv) {
             scoreDiv.textContent = `分數：${score}`;
-            levelDiv.textContent = `到達關卡：${level}`;
+            levelDiv.textContent = `關卡：${level}`;
             setHistoryRecord(score, level);
             const history = getHistoryRecord();
             historyScoreDiv.textContent = `最高分：${history.score}`;
             historyLevelDiv.textContent = `最高關卡：${history.level}`;
             modal.style.display = 'flex';
+            modal.style.visibility = 'visible';
+            modal.style.opacity = '1';
         }
     }
 
@@ -905,13 +906,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupRestartButton() {
-        const btns = document.querySelectorAll('.restart-btn');
-        btns.forEach(btn => {
+        // 只綁定結算畫面內的 restart-btn
+        const modal = document.querySelector('.game-over-modal');
+        if (!modal) return;
+        const btn = modal.querySelector('.restart-btn');
+        if (btn) {
             btn.onclick = () => {
                 hideGameOver();
                 restartGame();
             };
-        });
+        }
     }
 
     function restartGame() {
