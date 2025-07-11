@@ -802,6 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateLevelUI();
             updateComboUI(currentComboMultiplier);
             setupRestartButton();
+            setupGamePageRestartButton();
             return;
         }
         createBoard();
@@ -814,6 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLevelUI();
         updateComboUI(0);
         setupRestartButton();
+        setupGamePageRestartButton();
         console.log('Game initialized and ready!');
         saveGameState();
     }
@@ -893,6 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showGameOver() {
+        console.log('showGameOver');
         const modal = document.querySelector('.game-over-modal');
         const scoreDiv = document.querySelector('.final-score');
         const levelDiv = document.querySelector('.final-level');
@@ -908,12 +911,15 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.style.display = 'flex';
             modal.style.visibility = 'visible';
             modal.style.opacity = '1';
+            setupRestartButton(); // Set up the restart button when modal is shown
+            disableGamePageRestartButton(); // Disable game page restart button
         }
     }
 
     function hideGameOver() {
         const modal = document.querySelector('.game-over-modal');
         if (modal) modal.style.display = 'none';
+        enableGamePageRestartButton(); // 遊戲結束時啟用主畫面 restart-btn
     }
 
     function setupRestartButton() {
@@ -926,6 +932,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 hideGameOver();
                 restartGame();
             };
+        }
+    }
+
+    function setupGamePageRestartButton() {
+        // 綁定主畫面的 restart-btn
+        const gamePageBtn = document.querySelector('.level-row .restart-btn');
+        if (gamePageBtn) {
+            gamePageBtn.onclick = () => {
+                restartGame();
+            };
+        }
+    }
+
+    function disableGamePageRestartButton() {
+        const gamePageBtn = document.querySelector('.level-row .restart-btn');
+        if (gamePageBtn) {
+            gamePageBtn.disabled = true;
+            gamePageBtn.style.opacity = '0.5';
+            gamePageBtn.style.cursor = 'not-allowed';
+        }
+    }
+
+    function enableGamePageRestartButton() {
+        const gamePageBtn = document.querySelector('.level-row .restart-btn');
+        if (gamePageBtn) {
+            gamePageBtn.disabled = false;
+            gamePageBtn.style.opacity = '1';
+            gamePageBtn.style.cursor = 'pointer';
         }
     }
 
@@ -951,6 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLevelUI();
         updateComboUI(0);
         saveGameState();
+        enableGamePageRestartButton(); // 遊戲結束時啟用主畫面 restart-btn
     }
 
     function saveGameState() {
