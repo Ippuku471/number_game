@@ -120,10 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const rand = Math.random();
         if (rand < 0.05) { // 5% chance of a revealed bomb
             return { type: 'bomb', isBomb: true, bombState: 'idle' };
-        } else if (rand < 0.20) { // 15% chance of a hidden bomb
-            return { type: 'hidden', isBomb: true };
-        } else { // 80% chance of a normal hidden block
-            return { type: 'hidden', isBomb: false };
+        } else if (rand < 0.20) { // 15% chance of a locked block
+            return { type: 'locked', isBomb: false };
+        } else { // 80% chance of a normal locked block
+            return { type: 'locked', isBomb: false };
         }
     }
 
@@ -156,10 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.style.backgroundImage = '';
 
                 if (block) {
-                    const displayType = (block.type === 'hidden' && block.isBomb) ? 'hidden' : block.type;
-                    cell.dataset.type = displayType;
+                    cell.dataset.type = block.type;
                     
-                    if (block.type === 'number' || block.type === 'striped') {
+                    if (block.type === 'number' || block.type === 'half-locked') {
                         cell.textContent = block.number;
                         cell.dataset.number = block.number;
                     }
@@ -233,7 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
         nextBlock = null;
         updatePreview();
 
-        // 清空 combo 顯示
+        // combo歸零（邏輯與UI）
+        currentComboMultiplier = 0;
         updateComboUI(0);
 
         // Simplified check: if the column is full for this type of block
@@ -293,38 +293,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function handleMatches() {
-        let chainCount = 0;
-        let maxCombo = 0;
+        // combo從全域currentComboMultiplier繼續累積
+        let combo = currentComboMultiplier || 0;
+        let maxCombo = combo;
         while (true) {
-            chainCount++;
-            if (chainCount > maxCombo) maxCombo = chainCount;
-            updateComboUI(chainCount);
             let numberMatches = findBlocksToClear();
-            if (numberMatches.size === 0) {
+            // 檢查場上是否有triggered狀態的炸彈
+            let hasTriggeredBomb = false;
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const block = boardState[r][c];
+                    if (block && block.type === 'bomb' && block.bombState === 'triggered') {
+                        hasTriggeredBomb = true;
+                        break;
+                    }
+                }
+                if (hasTriggeredBomb) break;
+            }
+            // 若沒有可消除方塊且沒有triggered炸彈，才break
+            if (numberMatches.size === 0 && !hasTriggeredBomb) {
                 break;
             }
+            // 每次消除時combo+1（只要有消除或有炸彈爆炸都算一波）
+            combo++;
+            if (combo > maxCombo) maxCombo = combo;
+            updateComboUI(combo);
+            // 處理消除
             if (numberMatches.size > 0) {
-                let comboMultiplier = chainCount;
                 numberMatches.forEach(blockString => {
                     const { row, col } = JSON.parse(blockString);
                     const block = boardState[row][col];
-                    if (block && block.type === 'number') {
-                        let base = block.number * 40;
-                        let finalScore = base * comboMultiplier;
-                        score += finalScore;
-                        showScoreFloat(row, col, finalScore, false, 'number', comboMultiplier);
+                    if (block) {
+                        const baseScore = calculateBaseScore(block);
+                        const scoreResult = addScore(baseScore, combo);
+                        showScoreFloat(row, col, scoreResult.finalScore, false, block.type, combo, scoreResult.comment);
                     }
                 });
                 await animateClearance(numberMatches);
                 triggerBombsForClearedNumbers(numberMatches); // 先觸發炸彈
-                await flashUnlocked(numberMatches); // 再解鎖
+                await flashUnlocked(numberMatches, combo); // 再解鎖
                 clearBlocksFromState(numberMatches); // 最後消除
                 applyGravity();
                 renderBoard();
                 updateScoreUI();
-                await new Promise(resolve => setTimeout(resolve, 350));
+                await new Promise(resolve => setTimeout(resolve, 550)); // 550ms等待
             }
-            // 2. 爆炸所有 triggered 的炸彈
+            // 處理所有triggered炸彈爆炸
             let anyBombExploded = false;
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
@@ -339,10 +353,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (anyBombExploded) {
                 // 處理爆炸範圍
                 const bombHitMap = Array.from({length: gridSize}, () => Array(gridSize).fill(0));
+                const explodedBombs = [];
+                // 收集所有爆炸的炸彈
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         const block = boardState[r][c];
                         if (block && block.type === 'bomb' && block.bombState === 'exploded') {
+                            explodedBombs.push({row: r, col: c});
                             const area = getBombArea(r, c);
                             area.forEach(pos => {
                                 bombHitMap[pos.row][pos.col]++;
@@ -350,22 +367,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
+                // 計算炸彈爆炸分數
+                explodedBombs.forEach(({row, col}) => {
+                    const baseScore = calculateBaseScore({type: 'bomb'});
+                    const scoreResult = addScore(baseScore, combo);
+                    showScoreFloat(row, col, scoreResult.finalScore, false, 'bomb', combo, scoreResult.comment);
+                });
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         let hit = bombHitMap[r][c];
                         let block = boardState[r][c];
                         while (hit > 0 && block) {
-                            if (block.type === 'hidden') {
-                                if (block.isBomb) {
-                                    block.type = 'bomb';
-                                    block.bombState = 'idle';
-                                } else {
-                                    block.type = 'striped';
-                                    if (typeof block.number !== 'number') {
-                                        block.number = Math.floor(Math.random() * 8) + 1;
-                                    }
+                            if (block.type === 'locked') {
+                                // 鎖住格子 → 半鎖格子
+                                block.type = 'half-locked';
+                                if (typeof block.number !== 'number') {
+                                    block.number = Math.floor(Math.random() * 8) + 1;
                                 }
-                            } else if (block.type === 'striped') {
+                            } else if (block.type === 'half-locked') {
+                                // 半鎖格子 → 數字格子
                                 block.type = 'number';
                                 if (typeof block.number !== 'number') {
                                     block.number = Math.floor(Math.random() * 8) + 1;
@@ -378,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
-                await new Promise(resolve => setTimeout(resolve, 300));
+                await new Promise(resolve => setTimeout(resolve, 550)); // 550ms等待
                 for (let r = 0; r < gridSize; r++) {
                     for (let c = 0; c < gridSize; c++) {
                         const block = boardState[r][c];
@@ -547,7 +567,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return area;
     }
 
-    async function flashUnlocked(blocksToUnlock) {
+    async function flashUnlocked(blocksToUnlock, combo) {
+        const unlockedBlocks = [];
+        
         blocksToUnlock.forEach((blockString) => {
             const { row, col } = JSON.parse(blockString);
             const block = boardState[row][col];
@@ -564,27 +586,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     const nCol = col + delta.c;
                     if (nRow >= 0 && nRow < gridSize && nCol >= 0 && nCol < gridSize) {
                         const neighbor = boardState[nRow][nCol];
-                        if (neighbor && neighbor.type === 'hidden') {
-                            if (neighbor.isBomb) {
-                                neighbor.type = 'bomb';
-                                neighbor.bombState = 'idle';
-                            } else {
-                                neighbor.type = 'striped';
-                                if (typeof neighbor.number !== 'number') {
-                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
-                                }
+                        if (neighbor && neighbor.type === 'locked') {
+                            // 鎖住格子 → 半鎖格子
+                            neighbor.type = 'half-locked';
+                            if (typeof neighbor.number !== 'number') {
+                                neighbor.number = Math.floor(Math.random() * 8) + 1;
                             }
-                        } else if (neighbor && neighbor.type === 'striped') {
+                            unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
+                        } else if (neighbor && neighbor.type === 'half-locked') {
+                            // 半鎖格子 → 數字格子
                             neighbor.type = 'number';
                             if (typeof neighbor.number !== 'number') {
                                 neighbor.number = Math.floor(Math.random() * 8) + 1;
                             }
+                            unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
                         }
                     }
                 });
             }
         });
+        
+        // 計算解鎖分數
+        unlockedBlocks.forEach(({row, col, type, number}) => {
+            const block = {type, number};
+            const baseScore = calculateBaseScore(block);
+            const scoreResult = addScore(baseScore, combo);
+            showScoreFloat(row, col, scoreResult.finalScore, false, type, combo, scoreResult.comment);
+        });
+        
         renderBoard();
+        updateScoreUI();
         await new Promise(resolve => setTimeout(resolve, 100));
     }
 
@@ -596,12 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`[clearBlocksFromState] 消除: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
                 boardState[row][col] = null;
             } else {
-                // debug log
-                if (block) {
-                    console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
-                } else {
-                    console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, block=null`);
-                }
+                console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, type=${block ? block.type : 'null'}, number=${block ? block.number : 'null'}`);
             }
             console.log('[clearBlocksFromState] boardState after clear:', JSON.parse(JSON.stringify(boardState)));
         });
@@ -670,13 +696,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const cell = getCellElement(row, col);
             const block = boardState[row][col];
 
-            if (cell && block) {
+            if (cell && block && block.type === 'number') {
                 cell.textContent = ''; // 動畫一開始就清空數字
-                const animationClass = (block.type === 'number') ? 'clearing-color' : 'clearing-special';
-                cell.classList.add(animationClass);
+                cell.classList.add('clearing-color');
                 promises.push(new Promise(resolve => {
                     cell.addEventListener('animationend', () => {
-                        cell.classList.remove(animationClass);
+                        cell.classList.remove('clearing-color');
                         resolve();
                     }, { once: true });
                 }));
@@ -803,7 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function showScoreFloat(row, col, gain, isBomb = false, type = 'number', combo = 1) {
+    function showScoreFloat(row, col, gain, isBomb = false, type = 'number', combo = 1, comment = '') {
         const gameBoard = document.querySelector('.game-board');
         const lineContainer = document.querySelector('.line-container');
         if (!gameBoard || !lineContainer) return;
@@ -813,19 +838,22 @@ document.addEventListener('DOMContentLoaded', () => {
         float.className = 'score-float';
         float.textContent = (isBomb ? '💣' : '') + `+${gain}`;
 
-        // 根據 combo 數決定顏色與字樣
-        if (combo >= 2 && combo <= 3) {
-            float.classList.add('combo-amazing');
-            float.textContent = 'amazing!\n' + float.textContent;
-        } else if (combo >= 4 && combo <= 5) {
-            float.classList.add('combo-fantastic');
-            float.textContent = 'fantastic!\n' + float.textContent;
-        } else if (combo >= 6 && combo <= 7) {
-            float.classList.add('combo-incredible');
-            float.textContent = 'incredible!\n' + float.textContent;
-        } else if (combo >= 8) {
-            float.classList.add('combo-unbelievable');
-            float.textContent = 'unbelievable!\n' + float.textContent;
+        // 根據評語決定顏色與字樣
+        if (comment) {
+            float.textContent = comment + '\n' + float.textContent;
+            
+            // 根據評語設定CSS類別
+            if (comment === 'nice!') {
+                float.classList.add('combo-amazing');
+            } else if (comment === 'amazing!') {
+                float.classList.add('combo-amazing');
+            } else if (comment === 'fantastic!') {
+                float.classList.add('combo-fantastic');
+            } else if (comment === 'incredible!') {
+                float.classList.add('combo-incredible');
+            } else if (comment === 'unbelievable!') {
+                float.classList.add('combo-unbelievable');
+            }
         }
 
         // 灰底
@@ -856,11 +884,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function showGameOver() {
         const modal = document.querySelector('.game-over-modal');
         const scoreDiv = document.querySelector('.final-score');
-        const comboDiv = document.querySelector('.final-combo');
-        if (modal && scoreDiv && comboDiv) {
+        const levelDiv = document.querySelector('.final-level');
+        const historyScoreDiv = document.querySelector('.history-score');
+        const historyLevelDiv = document.querySelector('.history-level');
+        if (modal && scoreDiv && levelDiv && historyScoreDiv && historyLevelDiv) {
             scoreDiv.textContent = `分數：${score}`;
-            comboDiv.textContent = `最大Combo：${maxComboRecord}`;
+            levelDiv.textContent = `關卡：${level}`;
+            setHistoryRecord(score, level);
+            const history = getHistoryRecord();
+            historyScoreDiv.textContent = `最高分：${history.score}`;
+            historyLevelDiv.textContent = `最高關卡：${history.level}`;
             modal.style.display = 'flex';
+            modal.style.visibility = 'visible';
+            modal.style.opacity = '1';
         }
     }
 
@@ -870,7 +906,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupRestartButton() {
-        const btn = document.querySelector('.restart-btn');
+        // 只綁定結算畫面內的 restart-btn
+        const modal = document.querySelector('.game-over-modal');
+        if (!modal) return;
+        const btn = modal.querySelector('.restart-btn');
         if (btn) {
             btn.onclick = () => {
                 hideGameOver();
@@ -970,6 +1009,93 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+    }
+
+    // === 計分系統常數 ===
+    const SCORE_CONSTANTS = {
+        // 基礎分數
+        NUMBER_BLOCK_BASE: 20,  // 數字格子基礎分數
+        LOCKED_BLOCK: 200,      // 鎖住格子分數
+        HALF_LOCKED_BLOCK: 80,  // 半鎖格子分數
+        BOMB_BLOCK: 100,        // 炸彈格子分數
+        
+        // 評語門檻
+        NICE_THRESHOLD: 500,
+        AMAZING_THRESHOLD: 1000,
+        FANTASTIC_THRESHOLD: 3000,
+        INCREDIBLE_THRESHOLD: 6000,
+        UNBELIEVABLE_THRESHOLD: 10000
+    };
+
+    // === 計分系統函數 ===
+    function calculateBaseScore(block) {
+        if (!block) return 0;
+        
+        switch (block.type) {
+            case 'number':
+                return block.number * SCORE_CONSTANTS.NUMBER_BLOCK_BASE;
+            case 'locked':
+                return SCORE_CONSTANTS.LOCKED_BLOCK;
+            case 'half-locked':
+                return SCORE_CONSTANTS.HALF_LOCKED_BLOCK;
+            case 'bomb':
+                return SCORE_CONSTANTS.BOMB_BLOCK;
+            default:
+                return 0;
+        }
+    }
+
+    function calculateComboMultiplier(combo) {
+        if (combo <= 1) return 1;
+        return combo * combo; // combo²
+    }
+
+    function getScoreComment(score) {
+        if (score < SCORE_CONSTANTS.NICE_THRESHOLD) {
+            return '';
+        } else if (score < SCORE_CONSTANTS.AMAZING_THRESHOLD) {
+            return 'nice!';
+        } else if (score < SCORE_CONSTANTS.FANTASTIC_THRESHOLD) {
+            return 'amazing!';
+        } else if (score < SCORE_CONSTANTS.INCREDIBLE_THRESHOLD) {
+            return 'fantastic!';
+        } else if (score < SCORE_CONSTANTS.UNBELIEVABLE_THRESHOLD) {
+            return 'incredible!';
+        } else {
+            return 'unbelievable!';
+        }
+    }
+
+    function addScore(baseScore, combo = 1) {
+        const comboMultiplier = calculateComboMultiplier(combo);
+        const finalScore = baseScore * comboMultiplier;
+        score += finalScore;
+        
+        console.log(`[計分] 基礎分數: ${baseScore}, Combo: ${combo}, 倍數: ${comboMultiplier}, 最終分數: ${finalScore}, 總分: ${score}`);
+        
+        return {
+            baseScore,
+            comboMultiplier,
+            finalScore,
+            comment: getScoreComment(finalScore)
+        };
+    }
+
+    // 最高分與最高關卡紀錄
+    function getHistoryRecord() {
+        const data = localStorage.getItem('numberGameHistory');
+        if (!data) return { score: 0, level: 1 };
+        try {
+            return JSON.parse(data);
+        } catch {
+            return { score: 0, level: 1 };
+        }
+    }
+    function setHistoryRecord(score, level) {
+        const old = getHistoryRecord();
+        if (score > old.score || (score === old.score && level > old.level)) {
+            localStorage.setItem('numberGameHistory', JSON.stringify({ score, level }));
+        }
     }
 
     // === 主初始化 ===
