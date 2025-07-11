@@ -293,129 +293,140 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function handleMatches() {
-        // combo從全域currentComboMultiplier繼續累積
         let combo = currentComboMultiplier || 0;
         let maxCombo = combo;
         while (true) {
             let numberMatches = findBlocksToClear();
-            // 檢查場上是否有triggered狀態的炸彈
-            let hasTriggeredBomb = false;
-            for (let r = 0; r < gridSize; r++) {
-                for (let c = 0; c < gridSize; c++) {
-                    const block = boardState[r][c];
-                    if (block && block.type === 'bomb' && block.bombState === 'triggered') {
-                        hasTriggeredBomb = true;
-                        break;
-                    }
-                }
-                if (hasTriggeredBomb) break;
-            }
-            // 若沒有可消除方塊且沒有triggered炸彈，才break
+            const hasTriggeredBomb = hasAnyTriggeredBomb();
             if (numberMatches.size === 0 && !hasTriggeredBomb) {
                 break;
             }
-            // 每次消除時combo+1（只要有消除或有炸彈爆炸都算一波）
             combo++;
             if (combo > maxCombo) maxCombo = combo;
             updateComboUI(combo);
-            // 處理消除
             if (numberMatches.size > 0) {
-                numberMatches.forEach(blockString => {
-                    const { row, col } = JSON.parse(blockString);
-                    const block = boardState[row][col];
-                    if (block) {
-                        const baseScore = calculateBaseScore(block);
-                        const scoreResult = addScore(baseScore, combo);
-                        showScoreFloat(row, col, scoreResult.finalScore, false, block.type, combo, scoreResult.comment);
-                    }
-                });
-                await animateClearance(numberMatches);
-                triggerBombsForClearedNumbers(numberMatches); // 先觸發炸彈
-                await flashUnlocked(numberMatches, combo); // 再解鎖
-                clearBlocksFromState(numberMatches); // 最後消除
-                applyGravity();
-                renderBoard();
-                updateScoreUI();
-                await new Promise(resolve => setTimeout(resolve, 550)); // 550ms等待
+                await processBlockClearance(numberMatches, combo);
             }
-            // 處理所有triggered炸彈爆炸
-            let anyBombExploded = false;
+            await processBombExplosions(combo);
+        }
+        updateComboAfterMatch(maxCombo);
+        saveGameState();
+    }
+
+    function hasAnyTriggeredBomb() {
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < gridSize; c++) {
+                const block = boardState[r][c];
+                if (block && block.type === 'bomb' && block.bombState === 'triggered') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    async function processBlockClearance(numberMatches, combo) {
+        numberMatches.forEach(blockString => {
+            const { row, col } = JSON.parse(blockString);
+            const block = boardState[row][col];
+            if (block) {
+                const baseScore = calculateBaseScore(block);
+                const scoreResult = addScore(baseScore, combo);
+                showScoreFloat(row, col, scoreResult.finalScore, false, block.type, combo, scoreResult.comment);
+            }
+        });
+        await animateClearance(numberMatches);
+        triggerBombsForClearedNumbers(numberMatches); // 觸發炸彈
+        await flashUnlocked(numberMatches, combo); // 再解鎖
+        clearBlocksFromState(numberMatches); // 最後清除
+        applyGravity();
+        renderBoard();
+        updateScoreUI();
+        await new Promise(resolve => setTimeout(resolve, 550));
+    }
+
+    async function processBombExplosions(combo) {
+        let anyBombExploded = false;
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < gridSize; c++) {
+                const block = boardState[r][c];
+                if (block && block.type === 'bomb' && block.bombState === 'triggered') {
+                    block.bombState = 'exploded';
+                    anyBombExploded = true;
+                }
+            }
+        }
+        renderBoard();
+        if (anyBombExploded) {
+            // 計算炸彈爆炸範圍
+            const bombHitMap = Array.from({length: gridSize}, () => Array(gridSize).fill(0));
+            const explodedBombs = [];
+            // 收集所有爆炸的炸彈
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
                     const block = boardState[r][c];
-                    if (block && block.type === 'bomb' && block.bombState === 'triggered') {
-                        block.bombState = 'exploded';
-                        anyBombExploded = true;
+                    if (block && block.type === 'bomb' && block.bombState === 'exploded') {
+                        explodedBombs.push({row: r, col: c});
+                        const area = getBombArea(r, c);
+                        area.forEach(pos => {
+                            bombHitMap[pos.row][pos.col]++;
+                        });
                     }
                 }
             }
-            renderBoard();
-            if (anyBombExploded) {
-                // 處理爆炸範圍
-                const bombHitMap = Array.from({length: gridSize}, () => Array(gridSize).fill(0));
-                const explodedBombs = [];
-                // 收集所有爆炸的炸彈
-                for (let r = 0; r < gridSize; r++) {
-                    for (let c = 0; c < gridSize; c++) {
-                        const block = boardState[r][c];
-                        if (block && block.type === 'bomb' && block.bombState === 'exploded') {
-                            explodedBombs.push({row: r, col: c});
-                            const area = getBombArea(r, c);
-                            area.forEach(pos => {
-                                bombHitMap[pos.row][pos.col]++;
-                            });
-                        }
-                    }
-                }
-                // 計算炸彈爆炸分數
-                explodedBombs.forEach(({row, col}) => {
-                    const baseScore = calculateBaseScore({type: 'bomb'});
-                    const scoreResult = addScore(baseScore, combo);
-                    showScoreFloat(row, col, scoreResult.finalScore, false, 'bomb', combo, scoreResult.comment);
-                });
-                for (let r = 0; r < gridSize; r++) {
-                    for (let c = 0; c < gridSize; c++) {
-                        let hit = bombHitMap[r][c];
-                        let block = boardState[r][c];
-                        while (hit > 0 && block) {
-                            if (block.type === 'locked') {
-                                // 鎖住格子 → 半鎖格子
-                                block.type = 'half-locked';
-                                if (typeof block.number !== 'number') {
-                                    block.number = Math.floor(Math.random() * 8) + 1;
-                                }
-                            } else if (block.type === 'half-locked') {
-                                // 半鎖格子 → 數字格子
-                                block.type = 'number';
-                                if (typeof block.number !== 'number') {
-                                    block.number = Math.floor(Math.random() * 8) + 1;
-                                }
-                            } else if (block.type === 'bomb' && block.bombState === 'idle') {
-                                block.bombState = 'triggered';
+            // 計算炸彈爆炸分數
+            explodedBombs.forEach(({row, col}) => {
+                const baseScore = calculateBaseScore({type: 'bomb'});
+                const scoreResult = addScore(baseScore, combo);
+                showScoreFloat(row, col, scoreResult.finalScore, false, 'bomb', combo, scoreResult.comment);
+            });
+            // 處理爆炸後的方塊狀態
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    let hit = bombHitMap[r][c];
+                    let block = boardState[r][c];
+                    while (hit > 0 && block) {
+                        if (block.type === 'locked') {
+                            // 鎖住格子 → 半鎖格子
+                            block.type = 'half-locked';
+                            if (typeof block.number !== 'number') {
+                                block.number = Math.floor(Math.random() * 8) + 1;
                             }
-                            hit--;
-                            block = boardState[r][c];
+                        } else if (block.type === 'half-locked') {
+                            // 半鎖格子 → 數字格子
+                            block.type = 'number';
+                            if (typeof block.number !== 'number') {
+                                block.number = Math.floor(Math.random() * 8) + 1;
+                            }
+                        } else if (block.type === 'bomb' && block.bombState === 'idle') {
+                            block.bombState = 'triggered';
                         }
+                        hit--;
+                        block = boardState[r][c];
                     }
                 }
-                await new Promise(resolve => setTimeout(resolve, 550)); // 550ms等待
-                for (let r = 0; r < gridSize; r++) {
-                    for (let c = 0; c < gridSize; c++) {
-                        const block = boardState[r][c];
-                        if (block && block.type === 'bomb' && block.bombState === 'exploded') {
-                            boardState[r][c] = null;
-                        }
-                    }
-                }
-                applyGravity();
-                renderBoard();
-                await new Promise(resolve => setTimeout(resolve, 100));
             }
+            await new Promise(resolve => setTimeout(resolve, 550));
+            // 清除爆炸的炸彈
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const block = boardState[r][c];
+                    if (block && block.type === 'bomb' && block.bombState === 'exploded') {
+                        boardState[r][c] = null;
+                    }
+                }
+            }
+            applyGravity();
+            renderBoard();
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
+        return anyBombExploded;
+    }
+
+    function updateComboAfterMatch(maxCombo) {
         currentComboMultiplier = maxCombo > 0 ? maxCombo : 1;
         if (maxCombo > maxComboRecord) maxComboRecord = maxCombo;
         updateComboUI(currentComboMultiplier);
-        saveGameState();
     }
     
     function findBlocksToClear() {
@@ -791,6 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateLevelUI();
             updateComboUI(currentComboMultiplier);
             setupRestartButton();
+            setupGamePageRestartButton();
             return;
         }
         createBoard();
@@ -803,6 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLevelUI();
         updateComboUI(0);
         setupRestartButton();
+        setupGamePageRestartButton();
         console.log('Game initialized and ready!');
         saveGameState();
     }
@@ -882,6 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showGameOver() {
+        console.log('showGameOver');
         const modal = document.querySelector('.game-over-modal');
         const scoreDiv = document.querySelector('.final-score');
         const levelDiv = document.querySelector('.final-level');
@@ -897,12 +911,15 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.style.display = 'flex';
             modal.style.visibility = 'visible';
             modal.style.opacity = '1';
+            setupRestartButton(); // Set up the restart button when modal is shown
+            disableGamePageRestartButton(); // Disable game page restart button
         }
     }
 
     function hideGameOver() {
         const modal = document.querySelector('.game-over-modal');
         if (modal) modal.style.display = 'none';
+        enableGamePageRestartButton(); // 遊戲結束時啟用主畫面 restart-btn
     }
 
     function setupRestartButton() {
@@ -915,6 +932,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 hideGameOver();
                 restartGame();
             };
+        }
+    }
+
+    function setupGamePageRestartButton() {
+        // 綁定主畫面的 restart-btn
+        const gamePageBtn = document.querySelector('.level-row .restart-btn');
+        if (gamePageBtn) {
+            gamePageBtn.onclick = () => {
+                restartGame();
+            };
+        }
+    }
+
+    function disableGamePageRestartButton() {
+        const gamePageBtn = document.querySelector('.level-row .restart-btn');
+        if (gamePageBtn) {
+            gamePageBtn.disabled = true;
+            gamePageBtn.style.opacity = '0.5';
+            gamePageBtn.style.cursor = 'not-allowed';
+        }
+    }
+
+    function enableGamePageRestartButton() {
+        const gamePageBtn = document.querySelector('.level-row .restart-btn');
+        if (gamePageBtn) {
+            gamePageBtn.disabled = false;
+            gamePageBtn.style.opacity = '1';
+            gamePageBtn.style.cursor = 'pointer';
         }
     }
 
@@ -940,6 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLevelUI();
         updateComboUI(0);
         saveGameState();
+        enableGamePageRestartButton(); // 遊戲結束時啟用主畫面 restart-btn
     }
 
     function saveGameState() {

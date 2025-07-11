@@ -152,7 +152,7 @@ body {
 }
 
 .cell[data-type="locked"] {
-    background: #4a4d56;
+    background: #b0bbb9;
 }
 
 .cell[data-type="half-locked"] {
