@@ -11,7 +11,19 @@
     <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed:400,700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="main-bg">
+    <!-- 主畫面 -->
+    <div class="main-menu" id="mainMenu">
+        <div class="menu-container">
+            <h1 class="game-title">數字方塊遊戲</h1>
+            <div class="menu-buttons">
+                <button class="mode-btn" id="normalMode">普通模式</button>
+                <button class="mode-btn" id="fastMode">快速模式</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲畫面 -->
+    <div class="main-bg" id="gameScreen" style="display:none;">
         <div class="game-container">
             <div class="game-header">
                 <div class="next-block-preview" title="下一顆"></div>
