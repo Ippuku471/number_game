@@ -20,6 +20,49 @@ document.addEventListener('DOMContentLoaded', () => {
     let score = 0;
     let currentComboMultiplier = 1;
     let maxComboRecord = 0;
+    let gameMode = 'normal'; // 'normal' 或 'fast'
+
+    // === 主畫面模式選擇 ===
+    function setupMainMenu() {
+        const normalModeBtn = document.getElementById('normalMode');
+        const fastModeBtn = document.getElementById('fastMode');
+        
+        normalModeBtn.addEventListener('click', () => {
+            gameMode = 'normal';
+            startGame();
+        });
+        
+        fastModeBtn.addEventListener('click', () => {
+            gameMode = 'fast';
+            startGame();
+        });
+    }
+
+    function startGame() {
+        // 隱藏主畫面，顯示遊戲畫面
+        document.getElementById('mainMenu').style.display = 'none';
+        document.getElementById('gameScreen').style.display = 'flex';
+        
+        // 根據模式設定初始步數
+        if (gameMode === 'normal') {
+            movesPerLevel = 15;
+        } else if (gameMode === 'fast') {
+            movesPerLevel = 12;
+        }
+        movesLeft = movesPerLevel;
+        
+        // 初始化遊戲
+        init();
+    }
+
+    function returnToMainMenu() {
+        // 隱藏遊戲畫面，顯示主畫面
+        document.getElementById('gameScreen').style.display = 'none';
+        document.getElementById('mainMenu').style.display = 'flex';
+        
+        // 重置遊戲狀態
+        restartGame();
+    }
 
     // === 浮動教學提示框 ===
     function showTutorialTip(text, arrowCol = null) {
@@ -665,7 +708,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         level++;
-        movesPerLevel = Math.max(8, 15 - (level - 1) * 2);
+        // 根據遊戲模式設定步數遞減公式
+        if (gameMode === 'normal') {
+            movesPerLevel = Math.max(8, 15 - (level - 1));
+        } else if (gameMode === 'fast') {
+            movesPerLevel = Math.max(6, 12 - (level - 1));
+        }
         movesLeft = movesPerLevel;
         
         renderBoard();
@@ -902,12 +950,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyScoreDiv = document.querySelector('.history-score');
         const historyLevelDiv = document.querySelector('.history-level');
         if (modal && scoreDiv && levelDiv && historyScoreDiv && historyLevelDiv) {
-            scoreDiv.textContent = `分數：${score}`;
+            const modeText = gameMode === 'normal' ? '普通模式' : '快速模式';
+            scoreDiv.textContent = `${modeText} - 分數：${score}`;
             levelDiv.textContent = `關卡：${level}`;
             setHistoryRecord(score, level);
             const history = getHistoryRecord();
-            historyScoreDiv.textContent = `最高分：${history.score}`;
-            historyLevelDiv.textContent = `最高關卡：${history.level}`;
+            historyScoreDiv.textContent = `${modeText}最高分：${history.score}`;
+            historyLevelDiv.textContent = `${modeText}最高關卡：${history.level}`;
             modal.style.display = 'flex';
             modal.style.visibility = 'visible';
             modal.style.opacity = '1';
@@ -923,14 +972,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupRestartButton() {
-        // 只綁定結算畫面內的 restart-btn
+        // 綁定結算畫面內的 restart-btn
         const modal = document.querySelector('.game-over-modal');
-        if (!modal) return;
-        const btn = modal.querySelector('.restart-btn');
-        if (btn) {
-            btn.onclick = () => {
-                hideGameOver();
-                restartGame();
+        if (modal) {
+            const modalBtn = modal.querySelector('.restart-btn');
+            if (modalBtn) {
+                modalBtn.onclick = () => {
+                    hideGameOver();
+                    returnToMainMenu();
+                };
+            }
+        }
+        
+        // 綁定主畫面的 restart-btn
+        const mainRestartBtn = document.querySelector('.level-row .restart-btn');
+        if (mainRestartBtn) {
+            mainRestartBtn.onclick = () => {
+                returnToMainMenu();
             };
         }
     }
@@ -998,19 +1056,20 @@ document.addEventListener('DOMContentLoaded', () => {
             movesLeft,
             score,
             currentComboMultiplier,
-            maxComboRecord
+            maxComboRecord,
+            gameMode
         };
-        localStorage.setItem('numberGameSave', JSON.stringify(state));
+        localStorage.setItem(`numberGameSave_${gameMode}`, JSON.stringify(state));
     }
 
     function loadGameState() {
-        const data = localStorage.getItem('numberGameSave');
+        const data = localStorage.getItem(`numberGameSave_${gameMode}`);
         if (!data) return false;
         try {
             const state = JSON.parse(data);
             // 檢查必要欄位
             if (!state || !Array.isArray(state.boardState) || !state.boardState.length) {
-                localStorage.removeItem('numberGameSave');
+                localStorage.removeItem(`numberGameSave_${gameMode}`);
                 return false;
             }
             boardState = state.boardState;
@@ -1022,14 +1081,21 @@ document.addEventListener('DOMContentLoaded', () => {
             score = state.score;
             currentComboMultiplier = state.currentComboMultiplier;
             maxComboRecord = state.maxComboRecord;
+            // 確保遊戲模式一致
+            if (state.gameMode && state.gameMode !== gameMode) {
+                return false;
+            }
             return true;
         } catch (e) {
-            localStorage.removeItem('numberGameSave');
+            localStorage.removeItem(`numberGameSave_${gameMode}`);
             return false;
         }
     }
 
-    function clearStorage() { localStorage.removeItem('numberGameSave'); }
+    function clearStorage() { 
+        localStorage.removeItem(`numberGameSave_${gameMode}`); 
+        localStorage.removeItem(`numberGameHistory_${gameMode}`);
+    }
 
     function triggerBombsForClearedNumbers(blocksToClear) {
         blocksToClear.forEach((blockString) => {
@@ -1127,9 +1193,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // 最高分與最高關卡紀錄
+    // 最高分與最高關卡紀錄（分模式記錄）
     function getHistoryRecord() {
-        const data = localStorage.getItem('numberGameHistory');
+        const data = localStorage.getItem(`numberGameHistory_${gameMode}`);
         if (!data) return { score: 0, level: 1 };
         try {
             return JSON.parse(data);
@@ -1140,10 +1206,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function setHistoryRecord(score, level) {
         const old = getHistoryRecord();
         if (score > old.score || (score === old.score && level > old.level)) {
-            localStorage.setItem('numberGameHistory', JSON.stringify({ score, level }));
+            localStorage.setItem(`numberGameHistory_${gameMode}`, JSON.stringify({ score, level }));
         }
     }
 
     // === 主初始化 ===
-    init();
+    setupMainMenu();
 }); 

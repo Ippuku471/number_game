@@ -13,6 +13,64 @@ body {
     overscroll-behavior: contain;
 }
 
+/* 主畫面樣式 */
+.main-menu {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #23272f;
+}
+
+.menu-container {
+    text-align: center;
+    background: #353942;
+    border-radius: 18px;
+    padding: 40px 30px;
+    box-shadow: 0 4px 32px #0008;
+    min-width: 300px;
+}
+
+.game-title {
+    font-size: 2.5em;
+    font-weight: 700;
+    margin: 0 0 40px 0;
+    color: #e3e6ee;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.mode-btn {
+    background: linear-gradient(135deg, #F9A03F, #FF6B35);
+    color: white;
+    border: none;
+    padding: 16px 32px;
+    font-size: 1.2em;
+    font-weight: 600;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(249, 160, 63, 0.3);
+    font-family: inherit;
+}
+
+.mode-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(249, 160, 63, 0.4);
+    background: linear-gradient(135deg, #FF6B35, #F9A03F);
+}
+
+.mode-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(249, 160, 63, 0.3);
+}
+
 .game-container {
     width: 400px;
     height: 600px;
