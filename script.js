@@ -161,11 +161,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function generateBottomBlock() {
         const rand = Math.random();
-        if (rand < 0.05) { // 5% chance of a revealed bomb
+        if (rand < 0.10) { // 10% chance of a revealed bomb
             return { type: 'bomb', isBomb: true, bombState: 'idle' };
-        } else if (rand < 0.20) { // 15% chance of a locked block
+        } else if (rand < 0.25) { // 15% chance of a locked block
             return { type: 'locked', isBomb: false };
-        } else { // 80% chance of a normal locked block
+        } else { // 75% chance of a normal locked block
             return { type: 'locked', isBomb: false };
         }
     }
@@ -237,19 +237,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function generateNewBlock() {
-        nextBlock = { type: 'number', number: Math.floor(Math.random() * 8) + 1 };
+        // 讓 next 也會出現所有種類的方塊（與先前本地可行版本一致）
+        const rand = Math.random();
+        if (rand < 0.10) { // 10%: bomb
+            nextBlock = { type: 'bomb', isBomb: true, bombState: 'idle' };
+        } else if (rand < 0.20) { // 10%: locked
+            nextBlock = { type: 'locked', isBomb: false };
+        } else { // 80%: number
+            nextBlock = { type: 'number', number: Math.floor(Math.random() * 8) + 1 };
+        }
         console.log('Generated new block:', nextBlock);
         updatePreview();
     }
 
     function updatePreview() {
         if (nextBlock) {
-            nextBlockPreview.textContent = nextBlock.number;
-            nextBlockPreview.dataset.number = nextBlock.number;
+            // 使用與棋盤相同的 data-* 樣式，不使用 emoji
+            nextBlockPreview.removeAttribute('data-type');
+            nextBlockPreview.removeAttribute('data-number');
+            nextBlockPreview.textContent = '';
+            if (nextBlock.type === 'number') {
+                nextBlockPreview.textContent = nextBlock.number;
+                nextBlockPreview.dataset.number = nextBlock.number;
+                nextBlockPreview.dataset.type = 'number';
+            } else if (nextBlock.type === 'locked') {
+                nextBlockPreview.dataset.type = 'locked';
+            } else if (nextBlock.type === 'bomb') {
+                nextBlockPreview.dataset.type = 'bomb';
+            }
             nextBlockPreview.style.visibility = 'visible';
         } else {
             nextBlockPreview.textContent = '';
             nextBlockPreview.removeAttribute('data-number');
+            nextBlockPreview.removeAttribute('data-type');
             nextBlockPreview.style.visibility = 'hidden';
         }
     }
@@ -641,10 +661,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (nRow >= 0 && nRow < gridSize && nCol >= 0 && nCol < gridSize) {
                         const neighbor = boardState[nRow][nCol];
                         if (neighbor && neighbor.type === 'locked') {
-                            // 鎖住格子 → 半鎖格子
-                            neighbor.type = 'half-locked';
-                            if (typeof neighbor.number !== 'number') {
-                                neighbor.number = Math.floor(Math.random() * 8) + 1;
+                            // 鎖住格子 → 半鎖格子（有機率直接變成炸彈）
+                            const rand = Math.random();
+                            if (rand < 0.05) { // 5% 機率直接變成炸彈
+                                neighbor.type = 'bomb';
+                                neighbor.isBomb = true;
+                                neighbor.bombState = 'idle';
+                                neighbor.number = undefined;
+                            } else {
+                                neighbor.type = 'half-locked';
+                                if (typeof neighbor.number !== 'number') {
+                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
+                                }
                             }
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
                         } else if (neighbor && neighbor.type === 'half-locked') {
@@ -1025,7 +1053,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // 重設所有狀態
         score = 0;
         level = 1;
-        movesPerLevel = 15;
+        // 依據目前模式設定初始步數（避免兩模式都變 15 步）
+        movesPerLevel = (gameMode === 'fast') ? 12 : 15;
         movesLeft = movesPerLevel;
         isGameOver = false;
         maxComboRecord = 0;

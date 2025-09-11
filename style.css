@@ -109,6 +109,19 @@ body {
     background: #23272f;
     margin-right: 8px;
     box-shadow: 0 2px 8px #0004;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.next-block-preview[data-type="bomb"] {
+    background: #23272f;
+    border-radius: 50%;
+    border: 2px solid #fff2;
+    box-shadow: 0 1px 4px #0008;
+}
+
+.next-block-preview[data-type="locked"] {
+    background: #b0bbb9;
 }
 
 .score-container {
