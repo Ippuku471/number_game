@@ -383,13 +383,17 @@ body {
     padding: 0;
     margin: 0;
     height: 100vh;
+    height: 100dvh; /* 使用動態視窗高度 */
     overflow: hidden;
+    background: #23272f;
   }
   
   .main-menu {
     width: 100vw;
     height: 100vh;
+    height: 100dvh; /* 使用動態視窗高度 */
     padding: 0;
+    background: #23272f;
   }
   
   .menu-container {
@@ -412,6 +416,7 @@ body {
   .main-bg {
     width: 100vw;
     height: 100vh;
+    height: 100dvh; /* 使用動態視窗高度 */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -421,16 +426,19 @@ body {
   }
   
   .game-container {
-    width: 95vw;
-    height: 95vh;
+    width: 90vw;
+    height: auto;
     max-width: 400px;
-    max-height: 600px;
+    max-height: 85vh;
+    max-height: 85dvh; /* 使用動態視窗高度 */
     min-width: 320px;
     min-height: 500px;
     padding: 20px 15px 15px 15px;
     border-radius: 15px;
     display: flex;
     flex-direction: column;
+    background: #353942;
+    box-shadow: 0 4px 32px #0008;
   }
   
   .game-header {
@@ -547,8 +555,10 @@ body {
 /* 超小螢幕優化 */
 @media (max-width: 400px) {
   .game-container {
-    width: 98vw;
-    height: 98vh;
+    width: 95vw;
+    height: auto;
+    max-height: 90vh;
+    max-height: 90dvh; /* 使用動態視窗高度 */
     padding: 15px 10px 10px 10px;
   }
   
@@ -569,6 +579,31 @@ body {
   
   .score-display {
     font-size: 1.4em;
+  }
+}
+
+/* iPhone 特殊處理 */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 600px) {
+    body {
+      height: 100vh;
+      height: -webkit-fill-available; /* iOS Safari 特殊處理 */
+    }
+    
+    .main-menu {
+      height: 100vh;
+      height: -webkit-fill-available;
+    }
+    
+    .main-bg {
+      height: 100vh;
+      height: -webkit-fill-available;
+    }
+    
+    .game-container {
+      max-height: 85vh;
+      max-height: calc(100vh - 20px); /* 確保不超出視窗 */
+    }
   }
 }
 
