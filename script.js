@@ -197,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.classList.remove('bomb-triggered');
                 cell.classList.remove('bomb-exploded');
                 cell.style.backgroundImage = '';
+                cell.style.visibility = ''; // 重置 visibility
 
                 if (block) {
                     cell.dataset.type = block.type;
@@ -410,33 +411,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function processBombExplosions(combo) {
         let anyBombExploded = false;
+        const triggeredBombs = [];
+        
+        // 先收集所有觸發的炸彈位置
         for (let r = 0; r < gridSize; r++) {
             for (let c = 0; c < gridSize; c++) {
                 const block = boardState[r][c];
                 if (block && block.type === 'bomb' && block.bombState === 'triggered') {
+                    triggeredBombs.push({row: r, col: c});
                     block.bombState = 'exploded';
                     anyBombExploded = true;
                 }
             }
         }
-        renderBoard();
+        
         if (anyBombExploded) {
+            // 在觸發位置立即爆炸，不等待重力
+            renderBoard();
+            
             // 計算炸彈爆炸範圍
             const bombHitMap = Array.from({length: gridSize}, () => Array(gridSize).fill(0));
             const explodedBombs = [];
-            // 收集所有爆炸的炸彈
-            for (let r = 0; r < gridSize; r++) {
-                for (let c = 0; c < gridSize; c++) {
-                    const block = boardState[r][c];
-                    if (block && block.type === 'bomb' && block.bombState === 'exploded') {
-                        explodedBombs.push({row: r, col: c});
-                        const area = getBombArea(r, c);
-                        area.forEach(pos => {
-                            bombHitMap[pos.row][pos.col]++;
-                        });
-                    }
-                }
-            }
+            
+            // 使用觸發位置進行爆炸計算
+            triggeredBombs.forEach(({row, col}) => {
+                explodedBombs.push({row, col});
+                const area = getBombArea(row, col);
+                area.forEach(pos => {
+                    bombHitMap[pos.row][pos.col]++;
+                });
+            });
             // 計算炸彈爆炸分數
             explodedBombs.forEach(({row, col}) => {
                 const baseScore = calculateBaseScore({type: 'bomb'});
@@ -444,6 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showScoreFloat(row, col, scoreResult.finalScore, false, 'bomb', combo, scoreResult.comment);
             });
             // 處理爆炸後的方塊狀態
+            const newMatches = new Set(); // 收集新產生的可消除方塊
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
                     let hit = bombHitMap[r][c];
@@ -461,6 +466,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (typeof block.number !== 'number') {
                                 block.number = Math.floor(Math.random() * 8) + 1;
                             }
+                            // 檢查是否立即符合消除條件
+                            const blockString = JSON.stringify({row: r, col: c});
+                            if (isBlockEligibleForClearance(r, c)) {
+                                newMatches.add(blockString);
+                            }
                         } else if (block.type === 'bomb' && block.bombState === 'idle') {
                             block.bombState = 'triggered';
                         }
@@ -469,7 +479,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-            await new Promise(resolve => setTimeout(resolve, 550));
+            
+            // 如果有新產生的可消除方塊，先處理它們
+            if (newMatches.size > 0) {
+                await processBlockClearance(newMatches, combo);
+                await new Promise(resolve => setTimeout(resolve, 550)); // 與普通消除相同的延遲
+            } else {
+                await new Promise(resolve => setTimeout(resolve, 550));
+            }
             // 清除爆炸的炸彈
             for (let r = 0; r < gridSize; r++) {
                 for (let c = 0; c < gridSize; c++) {
@@ -546,6 +563,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         console.log('[findBlocksToClear] blocksToClear:', Array.from(blocksToClear));
         return blocksToClear;
+    }
+
+    // 檢查單一方塊是否符合消除條件
+    function isBlockEligibleForClearance(row, col) {
+        const block = boardState[row][col];
+        if (!block || block.type !== 'number') return false;
+        
+        // 檢查橫向
+        let hStart = col, hEnd = col;
+        while (hStart > 0 && boardState[row][hStart - 1]) hStart--;
+        while (hEnd < gridSize - 1 && boardState[row][hEnd + 1]) hEnd++;
+        let hLength = hEnd - hStart + 1;
+        if (block.number === hLength) return true;
+        
+        // 檢查縱向
+        let vStart = row, vEnd = row;
+        while (vStart > 0 && boardState[vStart - 1][col]) vStart--;
+        while (vEnd < gridSize - 1 && boardState[vEnd + 1][col]) vEnd++;
+        let vLength = vEnd - vStart + 1;
+        if (block.number === vLength) return true;
+        
+        return false;
     }
 
     function findAndDetonateBombs(clearedNumberedBlocks) {
@@ -789,6 +828,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 promises.push(new Promise(resolve => {
                     cell.addEventListener('animationend', () => {
                         cell.classList.remove('clearing-color');
+                        // 確保動畫結束後立即隱藏元素
+                        cell.style.visibility = 'hidden';
                         resolve();
                     }, { once: true });
                 }));
