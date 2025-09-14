@@ -1239,6 +1239,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // === 自動更新檢查 ===
+    function checkForUpdates() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistration().then(registration => {
+                if (registration) {
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // 有新版本可用，提示用戶更新
+                                showUpdateNotification();
+                            }
+                        });
+                    });
+                }
+            });
+        }
+    }
+
+    function showUpdateNotification() {
+        // 創建更新提示
+        const updateDiv = document.createElement('div');
+        updateDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #F9A03F;
+            color: #23272f;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            cursor: pointer;
+            user-select: none;
+        `;
+        updateDiv.textContent = '有新版本可用！點擊更新';
+        updateDiv.onclick = () => {
+            // 重新載入頁面以使用新版本
+            window.location.reload();
+        };
+        document.body.appendChild(updateDiv);
+        
+        // 3秒後自動消失
+        setTimeout(() => {
+            if (updateDiv.parentNode) {
+                updateDiv.parentNode.removeChild(updateDiv);
+            }
+        }, 3000);
+    }
+
     // === 主初始化 ===
     setupMainMenu();
+    checkForUpdates();
 }); 
