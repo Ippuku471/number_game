@@ -53,7 +53,7 @@ body {
     padding: 16px 32px;
     font-size: 1.2em;
     font-weight: 600;
-    border-radius: 12px;
+    border-radius: 10px;
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(249, 160, 63, 0.3);
@@ -104,7 +104,7 @@ body {
     align-items: center;
     font-size: 2em;
     font-weight: bold;
-    border-radius: 8px;
+    border-radius: 6px;
     color: #fff;
     background: #23272f;
     margin-right: 8px;
@@ -194,11 +194,11 @@ body {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     grid-template-rows: repeat(8, 1fr);
-    gap: 4px;
+    gap: 3px;
     width: 320px;
     height: 320px;
     background: #44474f;
-    border-radius: 12px;
+    border-radius: 10px;
     margin: 0 auto;
     position: relative;
     box-shadow: 0 2px 12px #0006;
@@ -206,14 +206,14 @@ body {
 
 .cell {
     background: #5a5d66;
-    border-radius: 8px;
+    border-radius: 6px;
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 1.4em;
+    font-size: 1.2em;
     font-weight: bold;
     color: #fff;
-    transition: background 0.18s, transform 0.18s;
+    transition: none; /* 強制關閉過渡效果，防止消除動畫後的回彈 */
     box-shadow: 0 1px 4px #23272f44;
     border: none;
     user-select: none;
@@ -248,11 +248,12 @@ body {
 .cell[data-number="8"], .next-block-preview[data-number="8"] { background: #4C7FF8; }
 
 .cell.fall {
-    animation: fall-animation 0.5s cubic-bezier(.4,1.4,.6,1);
+    animation: fall-animation 0.4s cubic-bezier(.4,1.4,.6,1);
 }
 
 .cell.clearing-color {
     animation: clear-color-animation 0.4s forwards;
+    animation-fill-mode: forwards;  /* 確保動畫結束後停留在最終狀態，避免回彈 */
     background: #fff !important;
     z-index: 2;
 }
@@ -359,7 +360,7 @@ body {
     width: auto;
     min-width: 120px;
     height: 40px;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #1976d2;
     color: #fff;
     font-size: 1.1em;
@@ -509,7 +510,7 @@ body {
   }
   
   .left-moves {
-    gap: 4px;
+    gap: 3px;
     height: 32px;
   }
   
@@ -532,7 +533,7 @@ body {
     width: 90vw;
     max-width: 350px;
     padding: 25px 20px 20px 20px;
-    border-radius: 12px;
+    border-radius: 10px;
   }
   
   .game-over-title {
@@ -578,7 +579,7 @@ body {
   }
   
   .score-display {
-    font-size: 1.4em;
+    font-size: 1.2em;
   }
 }
 
@@ -627,7 +628,7 @@ body {
   text-align: center;
 }
 #tutorial-step-title {
-  font-size: 1.4em;
+  font-size: 1.2em;
   font-weight: bold;
   margin-bottom: 12px;
 }
@@ -640,7 +641,7 @@ body {
   font-size: 1em;
   padding: 8px 24px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #1976d2;
   color: #fff;
   cursor: pointer;
@@ -668,7 +669,7 @@ body {
   color: #222;
   font-size: 1.1em;
   font-weight: bold;
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 4px 24px #0002;
   padding: 18px 28px;
   z-index: 100;

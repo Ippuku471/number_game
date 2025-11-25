@@ -191,13 +191,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cell = getCellElement(r, c);
                 const block = boardState[r][c];
 
+                // 強制移除所有動畫相關的 class
+                cell.classList.remove('clearing-color');
+                cell.classList.remove('bomb-triggered');
+                cell.classList.remove('bomb-exploded');
+
                 cell.textContent = '';
                 cell.removeAttribute('data-number');
                 cell.removeAttribute('data-type');
-                cell.classList.remove('bomb-triggered');
-                cell.classList.remove('bomb-exploded');
                 cell.style.backgroundImage = '';
                 cell.style.visibility = ''; // 重置 visibility
+
+                // 如果格子是 null，確保清除所有 inline styles
+                if (!block) {
+                    cell.style.opacity = '';
+                    cell.style.transform = '';
+                }
 
                 if (block) {
                     cell.dataset.type = block.type;
@@ -245,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (rand < 0.20) { // 10%: locked
             nextBlock = { type: 'locked', isBomb: false };
         } else { // 80%: number
-            nextBlock = { type: 'number', number: Math.floor(Math.random() * 8) + 1 };
+        nextBlock = { type: 'number', number: Math.floor(Math.random() * 8) + 1 };
         }
         console.log('Generated new block:', nextBlock);
         updatePreview();
@@ -258,8 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
             nextBlockPreview.removeAttribute('data-number');
             nextBlockPreview.textContent = '';
             if (nextBlock.type === 'number') {
-                nextBlockPreview.textContent = nextBlock.number;
-                nextBlockPreview.dataset.number = nextBlock.number;
+            nextBlockPreview.textContent = nextBlock.number;
+            nextBlockPreview.dataset.number = nextBlock.number;
                 nextBlockPreview.dataset.type = 'number';
             } else if (nextBlock.type === 'locked') {
                 nextBlockPreview.dataset.type = 'locked';
@@ -320,16 +329,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         boardState[landingRow][col] = blockToDrop;
 
+        // 先渲染，讓方塊顯示在初始位置
+        renderBoard();
+        
+        // 然後獲取該格子的 DOM 元素，添加 .fall class
         const cell = getCellElement(landingRow, col);
         cell.classList.add('fall');
-        cell.addEventListener('animationend', () => cell.classList.remove('fall'), { once: true });
         
-        renderBoard();
-        // Wait for fall animation to be roughly complete
-        await new Promise(resolve => setTimeout(resolve, 500)); 
+        // 關鍵：等待動畫完成（400ms，與 CSS 動畫時間一致）
+        await new Promise(resolve => setTimeout(resolve, 400));
 
-        // Add a slight pause after landing before checking for matches
-        await new Promise(resolve => setTimeout(resolve, 100)); 
+        // 動畫結束後，移除 .fall class
+        cell.classList.remove('fall'); 
+
+        // Phase 1: 落地緩衝時間（150ms）
+        await new Promise(resolve => setTimeout(resolve, TIME_LANDING)); 
 
         // 只在所有 combo/消除/爆炸完全結束後才 movesLeft--
         await handleMatches();
@@ -389,24 +403,54 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
     }
 
+    // === 時序常數（嚴格管理遊戲節拍） ===
+    const TIME_LANDING = 150;        // 落地緩衝
+    const TIME_LASER_SHOW = 300;     // 雷射瞄準停留時間
+    const TIME_ANIMATION = 400;      // 消除/爆炸動畫時間
+    const TIME_GRAVITY_DELAY = 100;  // 消除後到掉落前的留白
+
     async function processBlockClearance(numberMatches, combo) {
-        numberMatches.forEach(blockString => {
-            const { row, col } = JSON.parse(blockString);
-            const block = boardState[row][col];
+        // 步驟 1: 計算分數
+                numberMatches.forEach(blockString => {
+                    const { row, col } = JSON.parse(blockString);
+                    const block = boardState[row][col];
             if (block) {
                 const baseScore = calculateBaseScore(block);
                 const scoreResult = addScore(baseScore, combo);
                 showScoreFloat(row, col, scoreResult.finalScore, false, block.type, combo, scoreResult.comment);
             }
         });
-        await animateClearance(numberMatches);
-        triggerBombsForClearedNumbers(numberMatches); // 觸發炸彈
-        await flashUnlocked(numberMatches, combo); // 再解鎖
-        clearBlocksFromState(numberMatches); // 最後清除
+        
+        // 步驟 2: 播放消除動畫（使用 setTimeout 確保不卡死）
+                await animateClearance(numberMatches);
+        
+        // 步驟 3: 清除數據
+        clearBlocksFromState(numberMatches);
+        
+        // 步驟 4: 【新增】在重繪前，手動將 DOM 隱藏，防止任何 CSS 狀態回彈可見
+        numberMatches.forEach(blockString => {
+            const { row, col } = JSON.parse(blockString);
+            const cell = getCellElement(row, col);
+            if (cell) {
+                cell.style.visibility = 'hidden';
+            }
+        });
+        
+        // 步驟 5: 執行邏輯更新 (觸發炸彈、解鎖等)
+        triggerBombsForClearedNumbers(numberMatches);
+        await flashUnlocked(numberMatches, combo);
+        
+        // 步驟 6: 重繪 (renderBoard 會自動重置 visibility，但此時內容已空，所以是安全的)
+        renderBoard();
+        updateScoreUI();
+        
+        // 步驟 7: 短暫延遲
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 步驟 8: 執行重力
         applyGravity();
         renderBoard();
         updateScoreUI();
-        await new Promise(resolve => setTimeout(resolve, 550));
     }
 
     async function processBombExplosions(combo) {
@@ -436,11 +480,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // 使用觸發位置進行爆炸計算
             triggeredBombs.forEach(({row, col}) => {
                 explodedBombs.push({row, col});
-                const area = getBombArea(row, col);
-                area.forEach(pos => {
+                     const area = getBombArea(row, col);
+                        area.forEach(pos => {
                     bombHitMap[pos.row][pos.col]++;
-                });
-            });
+                        });
+                    });
             // 計算炸彈爆炸分數
             explodedBombs.forEach(({row, col}) => {
                 const baseScore = calculateBaseScore({type: 'bomb'});
@@ -496,12 +540,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-            applyGravity();
-            renderBoard();
+                applyGravity();
+                renderBoard();
             await new Promise(resolve => setTimeout(resolve, 100));
-        }
+            }
         return anyBombExploded;
-    }
+        }
 
     function updateComboAfterMatch(maxCombo) {
         currentComboMultiplier = maxCombo > 0 ? maxCombo : 1;
@@ -650,7 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let r = bombRow - 1; r <= bombRow + 1; r++) {
                     for (let c = bombCol - 1; c <= bombCol + 1; c++) {
                         if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
-                            const block = boardState[r][c];
+                const block = boardState[r][c];
                             if (block && block.type === 'bomb' && (bombRow !== r || bombCol !== c)) {
                                 const newBombString = JSON.stringify({row: r, col: c});
                                 if (!bombsToDetonate.has(newBombString)) {
@@ -685,21 +729,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         blocksToUnlock.forEach((blockString) => {
             const { row, col } = JSON.parse(blockString);
-            const block = boardState[row][col];
-            if (!block) return;
-            if (block.type === 'number') {
-                const deltas = [
-                    { r: -1, c: 0 },
-                    { r: 1, c: 0 },
-                    { r: 0, c: -1 },
-                    { r: 0, c: 1 }
-                ];
-                deltas.forEach(delta => {
-                    const nRow = row + delta.r;
-                    const nCol = col + delta.c;
-                    if (nRow >= 0 && nRow < gridSize && nCol >= 0 && nCol < gridSize) {
-                        const neighbor = boardState[nRow][nCol];
-                        if (neighbor && neighbor.type === 'locked') {
+            
+            // 移除對自身方塊的檢查，直接進行鄰居檢查
+            // 我們信任傳入 blocksToUnlock 的座標都是有效的消除點
+            
+            // 直接檢查四周鄰居
+            const deltas = [
+                { r: -1, c: 0 },
+                { r: 1, c: 0 },
+                { r: 0, c: -1 },
+                { r: 0, c: 1 }
+            ];
+            
+            deltas.forEach(delta => {
+                const nRow = row + delta.r;
+                const nCol = col + delta.c;
+                
+                if (nRow >= 0 && nRow < gridSize && nCol >= 0 && nCol < gridSize) {
+                    const neighbor = boardState[nRow][nCol];
+                    
+                    // 鄰居必須存在 (不能是 null)
+                    if (neighbor) {
+                        if (neighbor.type === 'locked') {
                             // 鎖住格子 → 半鎖格子（有機率直接變成炸彈）
                             const rand = Math.random();
                             if (rand < 0.05) { // 5% 機率直接變成炸彈
@@ -714,7 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                             }
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
-                        } else if (neighbor && neighbor.type === 'half-locked') {
+                        } else if (neighbor.type === 'half-locked') {
                             // 半鎖格子 → 數字格子
                             neighbor.type = 'number';
                             if (typeof neighbor.number !== 'number') {
@@ -723,8 +774,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
                         }
                     }
-                });
-            }
+                }
+            });
         });
         
         // 計算解鎖分數
@@ -746,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const block = boardState[row][col];
             if (block && block.type === 'number') {
                 console.log(`[clearBlocksFromState] 消除: row=${row}, col=${col}, type=${block.type}, number=${block.number}`);
-                boardState[row][col] = null;
+            boardState[row][col] = null;
             } else {
                 console.log(`[clearBlocksFromState] 未消除格子: row=${row}, col=${col}, type=${block ? block.type : 'null'}, number=${block ? block.number : 'null'}`);
             }
@@ -816,27 +867,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function animateClearance(blocks) {
-        const promises = [];
+        // 1. 添加動畫 class
         blocks.forEach(blockString => {
             const { row, col } = JSON.parse(blockString);
             const cell = getCellElement(row, col);
-            const block = boardState[row][col];
-
-            if (cell && block && block.type === 'number') {
-                cell.textContent = ''; // 動畫一開始就清空數字
+            if (cell) {
                 cell.classList.add('clearing-color');
-                promises.push(new Promise(resolve => {
-                    cell.addEventListener('animationend', () => {
-                        cell.classList.remove('clearing-color');
-                        // 確保動畫結束後立即隱藏元素
-                        cell.style.visibility = 'hidden';
-                        resolve();
-                    }, { once: true });
-                }));
             }
         });
-        await Promise.all(promises);
-        await new Promise(resolve => setTimeout(resolve, 300)); // 統一延遲 300ms
+
+        // 2. 強制等待 400ms (與 CSS 一致)
+        await new Promise(resolve => setTimeout(resolve, 400));
     }
 
     function setupEventListeners() {
@@ -974,15 +1015,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 根據評語設定CSS類別
             if (comment === 'nice!') {
-                float.classList.add('combo-amazing');
+            float.classList.add('combo-amazing');
             } else if (comment === 'amazing!') {
                 float.classList.add('combo-amazing');
             } else if (comment === 'fantastic!') {
-                float.classList.add('combo-fantastic');
+            float.classList.add('combo-fantastic');
             } else if (comment === 'incredible!') {
-                float.classList.add('combo-incredible');
+            float.classList.add('combo-incredible');
             } else if (comment === 'unbelievable!') {
-                float.classList.add('combo-unbelievable');
+            float.classList.add('combo-unbelievable');
             }
         }
 
@@ -1047,7 +1088,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const modalBtn = modal.querySelector('.restart-btn');
             if (modalBtn) {
                 modalBtn.onclick = () => {
-                    hideGameOver();
+                hideGameOver();
                     returnToMainMenu();
                 };
             }
