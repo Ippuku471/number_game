@@ -18,6 +18,7 @@
             <div class="menu-buttons">
                 <button class="mode-btn" id="normalMode">普通模式</button>
                 <button class="mode-btn" id="fastMode">快速模式</button>
+                <button class="mode-btn" id="tutorialMode">教學 / ?</button>
             </div>
         </div>
     </div>
@@ -40,6 +41,30 @@
                 <button class="restart-btn" title="重新開始">&#x21bb;</button>
             </div>
             <div class="tutorial-tip" style="display:none;"></div>
+            <!-- 教學遮罩與面板 -->
+            <div class="tutorial-overlay" id="tutorialOverlay">
+                <div class="tutorial-dim" id="tutorialDim"></div>
+                <div class="tutorial-highlight" id="tutorialHighlight"></div>
+                <div class="tutorial-finger" id="tutorialFinger" style="display:none;"></div>
+                <div class="tutorial-panel">
+                    <div class="tutorial-text" id="tutorialText"></div>
+                    <button class="tutorial-next-btn" id="tutorialNextBtn">下一步</button>
+                </div>
+            </div>
+            <!-- 定格解說遮罩 -->
+            <div class="tutorial-dimmer" id="tutorialDimmer" style="display:none;">
+                <div class="tutorial-freeze-panel" id="tutorialFreezePanel">
+                    <div class="tutorial-freeze-text" id="tutorialFreezeText"></div>
+                    <button class="tutorial-continue-btn" id="tutorialContinueBtn">繼續</button>
+                </div>
+            </div>
+            <!-- 教學完成視窗 -->
+            <div class="tutorial-complete-modal" id="tutorialCompleteModal" style="display:none;">
+                <div class="tutorial-complete-content">
+                    <div class="tutorial-complete-title">恭喜完成教學！</div>
+                    <button class="tutorial-start-game-btn" id="tutorialStartGameBtn">開始遊戲</button>
+                </div>
+            </div>
         </div>
     </div>
 

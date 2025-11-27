@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupMainMenu() {
         const normalModeBtn = document.getElementById('normalMode');
         const fastModeBtn = document.getElementById('fastMode');
+        const tutorialBtn = document.getElementById('tutorialMode');
         
         normalModeBtn.addEventListener('click', () => {
             gameMode = 'normal';
@@ -36,6 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
             gameMode = 'fast';
             startGame();
         });
+
+        if (tutorialBtn) {
+            tutorialBtn.addEventListener('click', () => {
+                gameMode = 'normal';
+                startGame();
+                TutorialManager.start(true);
+            });
+        }
     }
 
     function startGame() {
@@ -53,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 初始化遊戲
         init();
+        // 首次進入遊戲時自動檢查是否需要啟動教學
+        TutorialManager.autoStartIfNeeded();
     }
 
     function returnToMainMenu() {
@@ -95,67 +106,327 @@ document.addEventListener('DOMContentLoaded', () => {
         if (oldArrow) oldArrow.remove();
     }
 
-    // === 新手教學步驟 ===
+    // === 教學系統狀態 ===
     let isTutorialMode = false;
-    let tutorialStep = 0;
-    const interactiveTutorialSteps = [
-        {
-            action: () => {
-                showTutorialTip('歡迎來到數字方塊遊戲！');
-                setTimeout(() => nextTutorialStep(), 1200);
+    const TUTORIAL_KEY = 'hasPlayedTutorial';
+
+    // 找到參與計算的連續區段（用於定格解說）
+    function findSegmentForBlock(row, col) {
+        const block = boardState[row][col];
+        if (!block) return null;
+        
+        // 檢查橫向
+        let hStart = col, hEnd = col;
+        while (hStart > 0 && boardState[row][hStart - 1]) hStart--;
+        while (hEnd < gridSize - 1 && boardState[row][hEnd + 1]) hEnd++;
+        let hLength = hEnd - hStart + 1;
+        if (block.type === 'number' && block.number === hLength) {
+            return { type: 'horizontal', startRow: row, endRow: row, startCol: hStart, endCol: hEnd, length: hLength };
+        }
+        
+        // 檢查縱向
+        let vStart = row, vEnd = row;
+        while (vStart > 0 && boardState[vStart - 1][col]) vStart--;
+        while (vEnd < gridSize - 1 && boardState[vEnd + 1][col]) vEnd++;
+        let vLength = vEnd - vStart + 1;
+        if (block.type === 'number' && block.number === vLength) {
+            return { type: 'vertical', startRow: vStart, endRow: vEnd, startCol: col, endCol: col, length: vLength };
+        }
+        
+        return null;
+    }
+
+    // 高亮連續區段
+    function highlightSegment(segment) {
+        if (!segment) return;
+        const gameBoard = document.querySelector('.game-board');
+        if (!gameBoard) return;
+        
+        // 移除舊的高亮
+        const oldHighlight = document.querySelector('.highlight-active-segment');
+        if (oldHighlight) oldHighlight.remove();
+        
+        // 計算區段範圍的邊界
+        const startCell = getCellElement(segment.startRow, segment.startCol);
+        const endCell = getCellElement(segment.endRow, segment.endCol);
+        if (!startCell || !endCell) return;
+        
+        const startRect = startCell.getBoundingClientRect();
+        const endRect = endCell.getBoundingClientRect();
+        const boardRect = gameBoard.getBoundingClientRect();
+        
+        const highlight = document.createElement('div');
+        highlight.className = 'highlight-active-segment';
+        
+        if (segment.type === 'horizontal') {
+            highlight.style.left = (startRect.left - boardRect.left - 4) + 'px';
+            highlight.style.top = (startRect.top - boardRect.top - 4) + 'px';
+            highlight.style.width = (endRect.right - startRect.left + 8) + 'px';
+            highlight.style.height = (startRect.height + 8) + 'px';
+        } else {
+            highlight.style.left = (startRect.left - boardRect.left - 4) + 'px';
+            highlight.style.top = (startRect.top - boardRect.top - 4) + 'px';
+            highlight.style.width = (startRect.width + 8) + 'px';
+            highlight.style.height = (endRect.bottom - startRect.top + 8) + 'px';
+        }
+        
+        gameBoard.appendChild(highlight);
+    }
+
+    const TutorialManager = {
+        isActive: false,
+        currentStep: 0,
+        allowedColumn: null,
+        scriptedNextBlock: null,
+        waitingForFreeze: false, // 是否正在等待定格解說
+        freezeResolve: null, // 用於恢復遊戲流程的 Promise resolve
+
+        start(fromButton = false) {
+            this.isActive = true;
+            isTutorialMode = true;
+            this.currentStep = 0;
+            this.waitingForFreeze = false;
+            this.showStep();
+            if (fromButton) {
+                localStorage.removeItem(TUTORIAL_KEY);
             }
         },
-        {
-            action: () => {
-                createBoard();
-                initializeBoardState();
-                setupEventListeners();
-                boardState[7][2] = { type: 'hidden', isBomb: false };
-                boardState[7][3] = { type: 'number', number: 2 };
-                nextBlock = { type: 'number', number: 3 };
+
+        end() {
+            this.isActive = false;
+            isTutorialMode = false;
+            this.allowedColumn = null;
+            this.scriptedNextBlock = null;
+            this.waitingForFreeze = false;
+            this.hideOverlay();
+            this.hideFreeze();
+            hideTutorialTip();
+            localStorage.setItem(TUTORIAL_KEY, '1');
+            localStorage.setItem('tutorialSeen', '1');
+            this.showCompleteModal();
+        },
+
+        showCompleteModal() {
+            const modal = document.getElementById('tutorialCompleteModal');
+            const startBtn = document.getElementById('tutorialStartGameBtn');
+            if (!modal || !startBtn) return;
+            
+            modal.style.display = 'flex';
+            startBtn.onclick = () => {
+                modal.style.display = 'none';
+                restartGame();
+            };
+        },
+
+        autoStartIfNeeded() {
+            if (!localStorage.getItem(TUTORIAL_KEY)) {
+                this.start(false);
+            }
+        },
+
+        showOverlay(message, options = {}) {
+            const overlay = document.getElementById('tutorialOverlay');
+            const textEl = document.getElementById('tutorialText');
+            const nextBtn = document.getElementById('tutorialNextBtn');
+            const finger = document.getElementById('tutorialFinger');
+
+            if (!overlay || !textEl || !nextBtn) return;
+            overlay.classList.add('visible');
+            textEl.textContent = message;
+
+            if (options.showNext === false) {
+                nextBtn.style.display = 'none';
+            } else {
+                nextBtn.style.display = 'inline-block';
+                nextBtn.onclick = () => this.nextStep();
+            }
+
+            if (options.showFinger) {
+                finger.style.display = 'block';
+            } else {
+                finger.style.display = 'none';
+            }
+        },
+
+        hideOverlay() {
+            const overlay = document.getElementById('tutorialOverlay');
+            if (overlay) overlay.classList.remove('visible');
+        },
+
+        highlightColumn(col) {
+            const overlay = document.getElementById('tutorialOverlay');
+            const gameBoard = document.querySelector('.game-board');
+            const highlight = document.getElementById('tutorialHighlight');
+            const dim = document.getElementById('tutorialDim');
+            if (!overlay || !gameBoard || !highlight || !dim) return;
+
+            const cell = document.querySelector(`.cell[data-row='7'][data-col='${col}']`);
+            if (!cell) return;
+
+            const overlayRect = overlay.getBoundingClientRect();
+            const boardRect = gameBoard.getBoundingClientRect();
+            const cellRect = cell.getBoundingClientRect();
+
+            highlight.style.left = (cellRect.left - overlayRect.left - 4) + 'px';
+            highlight.style.top = (cellRect.top - overlayRect.top - 4) + 'px';
+            highlight.style.width = (cellRect.width + 8) + 'px';
+            highlight.style.height = (cellRect.height + 8) + 'px';
+
+            const topCell = document.querySelector(`.cell[data-row='4'][data-col='0']`);
+            if (!topCell) return;
+            const topCellRect = topCell.getBoundingClientRect();
+
+            dim.style.left = (boardRect.left - overlayRect.left) + 'px';
+            dim.style.top = (boardRect.top - overlayRect.top) + 'px';
+            dim.style.width = boardRect.width + 'px';
+            dim.style.height = (topCellRect.bottom - boardRect.top) + 'px';
+        },
+
+        positionFinger(col) {
+            const finger = document.getElementById('tutorialFinger');
+            if (finger) finger.style.display = 'none';
+        },
+
+        getNextBlock() {
+            if (this.isActive && this.scriptedNextBlock) {
+                return { ...this.scriptedNextBlock };
+            }
+            return null;
+        },
+
+        handleBoardClick(col) {
+            if (!this.isActive) return;
+            if (this.allowedColumn === null || col !== this.allowedColumn) {
+                return;
+            }
+            dropBlock(col);
+        },
+
+        // 定格解說：暫停遊戲並高亮區段
+        async showFreeze(segment, message) {
+            this.waitingForFreeze = true;
+            
+            // 高亮區段
+            highlightSegment(segment);
+            
+            // 提高參與計算方塊的 z-index
+            for (let r = segment.startRow; r <= segment.endRow; r++) {
+                for (let c = segment.startCol; c <= segment.endCol; c++) {
+                    const cell = getCellElement(r, c);
+                    if (cell) {
+                        cell.style.zIndex = '1998';
+                        cell.style.position = 'relative';
+                    }
+                }
+            }
+            
+            // 顯示定格遮罩與說明
+            const dimmer = document.getElementById('tutorialDimmer');
+            const freezeText = document.getElementById('tutorialFreezeText');
+            const continueBtn = document.getElementById('tutorialContinueBtn');
+            
+            if (!dimmer || !freezeText || !continueBtn) return;
+            
+            dimmer.style.display = 'flex';
+            freezeText.textContent = message;
+            
+            // 等待玩家點擊繼續
+            return new Promise((resolve) => {
+                this.freezeResolve = resolve;
+                continueBtn.onclick = () => {
+                    this.hideFreeze();
+                    resolve();
+                };
+            });
+        },
+
+        hideFreeze() {
+            const dimmer = document.getElementById('tutorialDimmer');
+            if (dimmer) dimmer.style.display = 'none';
+            
+            // 移除高亮
+            const highlight = document.querySelector('.highlight-active-segment');
+            if (highlight) highlight.remove();
+            
+            // 重置 z-index
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                cell.style.zIndex = '';
+                cell.style.position = '';
+            });
+            
+            this.waitingForFreeze = false;
+        },
+
+        nextStep() {
+            this.currentStep++;
+            if (this.currentStep >= 2) {
+                // 教學結束，但不在這裡直接 end，等連鎖完成後再結束
+                return;
+            } else {
+                this.showStep();
+            }
+        },
+
+        showStep() {
+            createBoard();
+            initializeBoardState();
+            setupEventListeners();
+            this.allowedColumn = null;
+            this.scriptedNextBlock = null;
+
+            if (this.currentStep === 0) {
+                // Step 1: 橫向消除與解鎖
+                // Row 7: Col 4=[1], Col 5=[3], Col 6=[Locked 隱藏4], Col 7=[7]
+                // Row 6: Col 4=[1], Col 5=[Locked 隱藏7]
+                boardState[7][4] = { type: 'number', number: 1 };
+                boardState[7][5] = { type: 'number', number: 3 };
+                boardState[7][6] = { type: 'locked', hiddenNumber: 4 };
+                boardState[7][7] = { type: 'number', number: 7 };
+                boardState[6][4] = { type: 'number', number: 1 };
+                boardState[6][5] = { type: 'locked', hiddenNumber: 7 };
+                
+                // Next Block: 3，放在 Col 6
+                this.scriptedNextBlock = { type: 'number', number: 3 };
+                nextBlock = { ...this.scriptedNextBlock };
+                this.allowedColumn = 6;
                 renderBoard();
                 updatePreview();
-                showTutorialTip('這是一款益智消除遊戲，現在帶你實際體驗一次消除！');
-                setTimeout(() => nextTutorialStep(), 1800);
+                this.highlightColumn(this.allowedColumn);
+                this.showOverlay(
+                    '歡迎！這遊戲的規則是：當連續方塊的數量 = 方塊上的數字時，就會消除。\n請將數字 3 放在高亮欄位！',
+                    { showNext: false, showFinger: true }
+                );
+            } else if (this.currentStep === 1) {
+                // Step 2: 縱向消除與 Combo 連鎖
+                // 直接使用 Step 1 完成後的棋盤狀態，不重新初始化
+                this.prepareStep2();
             }
         },
-        {
-            action: () => {
-                isTutorialMode = true;
-                showTutorialTip('請點擊第5欄（灰色方塊右邊），將數字3放下去。', 4);
-            }
-        },
-        {
-            action: () => {
-                isTutorialMode = false;
-                showTutorialTip('因為這一行有3個方塊，剛好等於你剛剛放下的3，所以這三個會一起消除！\n\n消除規則：橫向或縱向連續的方塊數量等於其中任一方塊的數字時，這些方塊會被消除。');
-                setTimeout(() => nextTutorialStep(), 2200);
-            }
-        },
-        {
-            action: () => {
-                hideTutorialTip();
-                localStorage.setItem('tutorialSeen', '1');
-                restartGame();
-            }
+
+        // 準備 Step 2：只設置 nextBlock 和指引，不重置棋盤
+        prepareStep2() {
+            // Next Block: Locked(隱藏3)，放在 Col 5
+            this.scriptedNextBlock = { type: 'locked', hiddenNumber: 3 };
+            nextBlock = { ...this.scriptedNextBlock };
+            this.allowedColumn = 5;
+            renderBoard();
+            updatePreview();
+            this.highlightColumn(this.allowedColumn);
+            this.showOverlay(
+                '現在試試縱向消除！\n請將鎖定方塊放在高亮欄位，觀察縱向連續與連鎖反應！',
+                { showNext: false, showFinger: true }
+            );
         }
-    ];
-    function nextTutorialStep() {
-        tutorialStep++;
-        if (tutorialStep < interactiveTutorialSteps.length) {
-            interactiveTutorialSteps[tutorialStep].action();
-        }
-    }
+    };
+
     function showInteractiveTutorial() {
-        tutorialStep = 0;
-        interactiveTutorialSteps[0].action();
+        TutorialManager.start(true);
     }
+
     function tutorialBoardClick(col) {
-        if (isTutorialMode && tutorialStep === 2 && col === 4) {
-            dropBlock(col);
-            setTimeout(() => {
-                nextTutorialStep();
-            }, 800);
+        if (TutorialManager.isActive) {
+            TutorialManager.handleBoardClick(col);
         }
     }
 
@@ -247,14 +518,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function generateNewBlock() {
-        // 讓 next 也會出現所有種類的方塊（與先前本地可行版本一致）
-        const rand = Math.random();
-        if (rand < 0.10) { // 10%: bomb
-            nextBlock = { type: 'bomb', isBomb: true, bombState: 'idle' };
-        } else if (rand < 0.20) { // 10%: locked
-            nextBlock = { type: 'locked', isBomb: false };
-        } else { // 80%: number
-        nextBlock = { type: 'number', number: Math.floor(Math.random() * 8) + 1 };
+        // 教學模式：改由 TutorialManager 提供預設腳本方塊
+        const scripted = TutorialManager.getNextBlock();
+        if (scripted) {
+            nextBlock = scripted;
+        } else {
+            // 一般模式：隨機產生方塊
+            const rand = Math.random();
+            if (rand < 0.10) { // 10%: bomb
+                nextBlock = { type: 'bomb', isBomb: true, bombState: 'idle' };
+            } else if (rand < 0.20) { // 10%: locked
+                nextBlock = { type: 'locked', isBomb: false };
+            } else { // 80%: number
+                nextBlock = { type: 'number', number: Math.floor(Math.random() * 8) + 1 };
+            }
         }
         console.log('Generated new block:', nextBlock);
         updatePreview();
@@ -383,7 +660,56 @@ document.addEventListener('DOMContentLoaded', () => {
             if (combo > maxCombo) maxCombo = combo;
             updateComboUI(combo);
             if (numberMatches.size > 0) {
+                // 教學模式：定格解說
+                if (TutorialManager.isActive && !TutorialManager.waitingForFreeze) {
+                    // 找到第一個要消除的方塊，獲取其連續區段
+                    const firstMatch = Array.from(numberMatches)[0];
+                    const { row, col } = JSON.parse(firstMatch);
+                    const segment = findSegmentForBlock(row, col);
+                    
+                    if (segment) {
+                        let message = '';
+                        if (segment.type === 'horizontal') {
+                            message = `橫向連續 ${segment.length} 格 = 數字 ${segment.length}，消除！`;
+                        } else {
+                            message = `縱向連續 ${segment.length} 格 = 底部數字 ${segment.length}，消除！`;
+                        }
+                        
+                        // 如果是連鎖消除，顯示連鎖訊息
+                        if (combo > 1) {
+                            message = `連鎖反應！解鎖的 ${segment.length} 剛好消除！`;
+                        }
+                        
+                        await TutorialManager.showFreeze(segment, message);
+                    }
+                }
+                
                 await processBlockClearance(numberMatches, combo);
+                
+                // Step 1 完成後自動進入 Step 2（不重新初始化棋盤，沿用當前狀態）
+                if (TutorialManager.isActive && TutorialManager.currentStep === 0) {
+                    // 等待重力落下完成
+                    await new Promise(resolve => setTimeout(resolve, 600));
+                    // 進入 Step 2，但不重新初始化棋盤
+                    TutorialManager.currentStep = 1;
+                    TutorialManager.prepareStep2(); // 只設置 nextBlock 和指引，不重置棋盤
+                    break; // 跳出循環，等待下一步操作
+                }
+                
+                // Step 2 完成後結束教學（等待連鎖完成）
+                if (TutorialManager.isActive && TutorialManager.currentStep === 1) {
+                    // 等待重力落下
+                    await new Promise(resolve => setTimeout(resolve, 600));
+                    // 檢查是否還有連鎖
+                    const newMatches = findBlocksToClear();
+                    if (newMatches.size === 0) {
+                        // 連鎖完成，結束教學
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        TutorialManager.end();
+                        break;
+                    }
+                    // 如果還有連鎖，繼續處理（會在下一輪循環中處理）
+                }
             }
             await processBombExplosions(combo);
         }
@@ -752,26 +1078,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (neighbor) {
                         if (neighbor.type === 'locked') {
                             // 鎖住格子 → 半鎖格子（有機率直接變成炸彈）
-                            const rand = Math.random();
-                            if (rand < 0.05) { // 5% 機率直接變成炸彈
-                                neighbor.type = 'bomb';
-                                neighbor.isBomb = true;
-                                neighbor.bombState = 'idle';
-                                neighbor.number = undefined;
-                            } else {
+                            // 教學模式：使用 hiddenNumber
+                            if (TutorialManager.isActive && neighbor.hiddenNumber !== undefined) {
                                 neighbor.type = 'half-locked';
-                                if (typeof neighbor.number !== 'number') {
-                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
+                                neighbor.number = neighbor.hiddenNumber;
+                                delete neighbor.hiddenNumber;
+                            } else {
+                                const rand = Math.random();
+                                if (rand < 0.05) { // 5% 機率直接變成炸彈
+                                    neighbor.type = 'bomb';
+                                    neighbor.isBomb = true;
+                                    neighbor.bombState = 'idle';
+                                    neighbor.number = undefined;
+                                } else {
+                                    neighbor.type = 'half-locked';
+                                    if (typeof neighbor.number !== 'number') {
+                                        neighbor.number = Math.floor(Math.random() * 8) + 1;
+                                    }
                                 }
                             }
                             unlockedBlocks.push({row: nRow, col: nCol, type: 'locked'});
                         } else if (neighbor.type === 'half-locked') {
                             // 半鎖格子 → 數字格子
-                            neighbor.type = 'number';
-                            if (typeof neighbor.number !== 'number') {
-                                neighbor.number = Math.floor(Math.random() * 8) + 1;
+                            // 教學模式 Step 1：half-locked 保持不變，為連鎖做鋪陳
+                            if (TutorialManager.isActive && TutorialManager.currentStep === 0) {
+                                // Step 1 中，half-locked 不解鎖，保持半鎖狀態
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
+                            } else {
+                                neighbor.type = 'number';
+                                if (typeof neighbor.number !== 'number') {
+                                    neighbor.number = Math.floor(Math.random() * 8) + 1;
+                                }
+                                unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
                             }
-                            unlockedBlocks.push({row: nRow, col: nCol, type: 'half-locked'});
                         }
                     }
                 }
@@ -914,6 +1253,27 @@ document.addEventListener('DOMContentLoaded', () => {
             highlightColumn(col);
             showDropPreview(col);
         });
+
+        // 教學遮罩點擊處理：只允許點擊指定欄位
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        if (tutorialOverlay && !tutorialOverlay.dataset.bound) {
+            tutorialOverlay.dataset.bound = 'true';
+            tutorialOverlay.addEventListener('click', (event) => {
+                if (!TutorialManager.isActive) return;
+                // 透過座標反查底下的 cell
+                const overlay = event.currentTarget;
+                const prevPointer = overlay.style.pointerEvents;
+                // 暫時關閉遮罩的 pointer-events，取得底層元素
+                overlay.style.pointerEvents = 'none';
+                const target = document.elementFromPoint(event.clientX, event.clientY);
+                overlay.style.pointerEvents = prevPointer || 'auto';
+
+                const cell = target && target.closest ? target.closest('.cell') : null;
+                if (!cell) return;
+                const col = parseInt(cell.dataset.col, 10);
+                tutorialBoardClick(col);
+            });
+        }
     }
 
     function highlightColumn(col) {

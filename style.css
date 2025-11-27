@@ -378,6 +378,214 @@ body {
     color: #23272f;
 }
 
+/* === 教學遮罩與指引 === */
+.tutorial-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent; /* 具體遮罩由內部 .tutorial-dim 控制，保留底部三排可視 */
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1500;
+  pointer-events: auto; /* 由教學系統統一攔截點擊，再決定是否轉交給棋盤 */
+}
+
+.tutorial-overlay.visible {
+  display: flex;
+}
+
+.tutorial-panel {
+  pointer-events: auto;
+  background: #23272f;
+  color: #f5f5f5;
+  padding: 16px 20px;
+  border-radius: 12px;
+  max-width: 320px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  position: relative;
+  z-index: 2; /* 確保永遠在遮罩與高亮之上，不會被壓暗 */
+  transform: translateY(-12.5%); /* 向上移動一個row的距離（8行，一行約12.5%） */
+}
+
+.tutorial-dim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none; /* 不攔截事件，只做視覺遮罩 */
+  z-index: 0;
+}
+
+.tutorial-text {
+  margin-bottom: 12px;
+  white-space: pre-line;
+}
+
+.tutorial-next-btn {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #F9A03F;
+  color: #23272f;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.tutorial-highlight {
+  position: absolute;
+  border-radius: 8px;
+  border: 2px solid #F9A03F;
+  box-shadow: 0 0 0 4px rgba(249, 160, 63, 0.35);
+  pointer-events: none;
+  transition: all 0.2s ease-out;
+  z-index: 1;
+}
+
+.tutorial-finger {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox=\"0 0 24 24\" fill=\"white\"><path d=\"M9 11V2a2 2 0 0 1 4 0v9h1.5a1.5 1.5 0 0 1 1.493 1.356L16 12.5v1.55l1.52-.518a1.5 1.5 0 0 1 1.897.92l.04.13 1 3a1.5 1.5 0 0 1-1.004 1.88L20.3 19H18v2.5a1.5 1.5 0 0 1-1.356 1.493L16.5 23H11a6 6 0 0 1-5.996-5.775L5 17v-4.5a1.5 1.5 0 0 1 1.356-1.493L6.5 11H9z\"/></svg>') center/contain no-repeat;
+  animation: tutorial-finger-bounce 1s infinite;
+}
+
+@keyframes tutorial-finger-bounce {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(6px); opacity: 0.8; }
+}
+
+/* 定格解說遮罩 */
+.tutorial-dimmer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.tutorial-freeze-panel {
+  background: #23272f;
+  color: #f5f5f5;
+  padding: 24px 28px;
+  border-radius: 16px;
+  max-width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  z-index: 2001;
+  position: relative;
+}
+
+.tutorial-freeze-text {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  white-space: pre-line;
+  color: #f5f5f5;
+}
+
+.tutorial-continue-btn {
+  padding: 10px 24px;
+  border-radius: 999px;
+  border: none;
+  background: #F9A03F;
+  color: #23272f;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tutorial-continue-btn:hover {
+  background: #ffb84d;
+}
+
+.tutorial-continue-btn:active {
+  background: #e8902d;
+}
+
+/* 高亮參與計算的連續方塊 */
+.highlight-active-segment {
+  position: absolute;
+  border-radius: 8px;
+  border: 3px solid #4CAF50;
+  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.4), 0 0 20px rgba(76, 175, 80, 0.6);
+  pointer-events: none;
+  z-index: 1999;
+  transition: all 0.3s ease-out;
+  animation: segment-pulse 1.5s infinite;
+}
+
+@keyframes segment-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.4), 0 0 20px rgba(76, 175, 80, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(76, 175, 80, 0.5), 0 0 30px rgba(76, 175, 80, 0.8); }
+}
+
+/* 教學完成視窗 */
+.tutorial-complete-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.tutorial-complete-content {
+  background: #23272f;
+  color: #f5f5f5;
+  padding: 32px 40px;
+  border-radius: 20px;
+  max-width: 400px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8);
+  text-align: center;
+}
+
+.tutorial-complete-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 24px;
+  color: #F9A03F;
+}
+
+.tutorial-start-game-btn {
+  padding: 12px 32px;
+  border-radius: 999px;
+  border: none;
+  background: #F9A03F;
+  color: #23272f;
+  font-weight: bold;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tutorial-start-game-btn:hover {
+  background: #ffb84d;
+}
+
+.tutorial-start-game-btn:active {
+  background: #e8902d;
+}
+
 /* 手機佈局優化 */
 @media (max-width: 600px) {
   body {
